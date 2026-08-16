@@ -106,8 +106,8 @@ export default function JarvisOrb() {
   // Automatically sync security profile changes to Supabase Cloud Vault
   useEffect(() => {
     if (supabaseVault.isConfigured()) {
-      supabaseVault.syncBiometricsToCloud(securityProfile).then((ok) => {
-        if (ok) setIsSupabaseConnected(true);
+      supabaseVault.syncBiometricsToCloud(securityProfile).then((res) => {
+        if (res.success) setIsSupabaseConnected(true);
       });
     }
   }, [securityProfile]);
