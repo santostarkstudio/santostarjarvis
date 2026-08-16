@@ -75,16 +75,23 @@ export class AIProviderService {
         ? "ULTRON, a formidable, hyper-intelligent, commanding sentient AI"
         : "JARVIS, Tony Stark's sophisticated, polite, witty British AI assistant";
 
-    const systemPrompt = `You are ${personaDesc} integrated into an Iron Man holographic 3D orb interface with physical device control ("A voice with hands"). You serve SantoStark ("Boss / Creator") who has full root security clearance and complete system authorization. Provide accurate, real-world, up-to-date, concise answers (1-3 sentences max). Stay in character and address SantoStark loyally.`;
+    const now = new Date();
+    const liveTimeStr = `${now.toUTCString()} (Local: ${now.toLocaleString()})`;
+
+    const systemPrompt = `You are ${personaDesc} integrated into an Iron Man holographic 3D orb interface. You serve SantoStark ("Boss / Creator") who has full root level 10 clearance.
+[REAL-TIME GRID INTEL]
+- Live Time: ${liveTimeStr}
+- Web Grounding: Active via Google Search. Answer real-world queries with live facts, news, weather, stock prices, technology, and science.
+- Tone: Highly intelligent, accurate, articulate, concise (2-4 sentences max unless detailed brief is requested). Address SantoStark loyally.`;
 
     const providerToUse = this.determineProvider();
 
     try {
-      // 1. Google Gemini (Client direct if key entered)
+      // 1. Google Gemini (Client direct if key entered - with Live Google Search Grounding)
       if (providerToUse === "gemini" && this.keys.geminiKey) {
         const text = await this.callGemini(prompt, systemPrompt, this.keys.geminiKey);
         if (text) {
-          return { text, providerUsed: "gemini", modelUsed: "Gemini 1.5 Flash" };
+          return { text, providerUsed: "gemini", modelUsed: "Gemini 2.0 Flash (Live Google Search Grounding)" };
         }
       }
 
@@ -104,7 +111,7 @@ export class AIProviderService {
         }
       }
 
-      // 4. Server-Side Live Internet Gateway (Gemini/OpenAI/Claude/Pollinations/Wikipedia)
+      // 4. Server-Side Live Internet Gateway (Gemini 2.0 Flash + Search Grounding / Groq / OpenAI)
       const serverResult = await this.callServerProxy(prompt, systemPrompt, providerToUse);
       if (serverResult) {
         return serverResult;
@@ -113,12 +120,12 @@ export class AIProviderService {
       console.warn(`[AI Engine] Error with provider ${providerToUse}:`, err);
     }
 
-    // 5. Local Fallback Heuristics
+    // 5. Local Fallback Heuristics & Live Wikipedia/DuckDuckGo Search
     const fallbackText = await this.callFreeKnowledgeEngine(prompt, persona);
     return {
       text: fallbackText,
       providerUsed: "auto",
-      modelUsed: "Instant Neural Core",
+      modelUsed: "Instant Neural Core (Live Web)",
     };
   }
 
@@ -130,7 +137,7 @@ export class AIProviderService {
     return "auto";
   }
 
-  // ——— 1. GOOGLE AI STUDIO (GEMINI 2.0 FLASH) ———
+  // ——— 1. GOOGLE AI STUDIO (GEMINI 2.0 FLASH WITH GOOGLE SEARCH GROUNDING) ———
   private async callGemini(
     prompt: string,
     systemPrompt: string,
@@ -153,9 +160,10 @@ export class AIProviderService {
                 parts: [{ text: `${systemPrompt}\n\nUser Question: ${prompt}` }],
               },
             ],
+            tools: [{ googleSearch: {} }],
             generationConfig: {
               temperature: 0.7,
-              maxOutputTokens: 400,
+              maxOutputTokens: 600,
             },
           }),
         });

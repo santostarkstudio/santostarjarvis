@@ -8,7 +8,11 @@ export async function POST(req: Request) {
     const openaiKey = keys?.openaiKey || process.env.OPENAI_API_KEY;
     const claudeKey = keys?.claudeKey || process.env.ANTHROPIC_API_KEY;
 
-    // 1. Google AI Studio (Gemini 2.0 Flash / 1.5 Flash)
+    const now = new Date();
+    const liveTimeStr = `${now.toUTCString()} (Local: ${now.toLocaleString()})`;
+    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark."}\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}\n- Live Web Access: Active via Google Search Grounding. Provide real-world, accurate, up-to-the-minute answers.`;
+
+    // 1. Google AI Studio (Gemini 2.0 Flash with Google Search Grounding)
     if ((provider === "gemini" || (provider === "auto" && geminiKey)) && geminiKey) {
       const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
       for (const model of models) {
@@ -23,12 +27,13 @@ export async function POST(req: Request) {
               contents: [
                 {
                   role: "user",
-                  parts: [{ text: `${systemPrompt}\n\nUser Question: ${prompt}` }],
+                  parts: [{ text: `${enhancedSystemPrompt}\n\nUser Question: ${prompt}` }],
                 },
               ],
+              tools: [{ googleSearch: {} }],
               generationConfig: {
                 temperature: 0.7,
-                maxOutputTokens: 400,
+                maxOutputTokens: 600,
               },
             }),
           });

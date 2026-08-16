@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
 
     const encoder = new TextEncoder();
 
+    const now = new Date();
+    const liveTimeStr = `${now.toUTCString()} (Local: ${now.toLocaleString()})`;
+    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark."}\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}\n- Live Web Access: Active via Google Search Grounding. Provide real-world, accurate, up-to-the-minute answers.`;
+
     // 1. GROQ ULTRA-FAST STREAMING (800+ tokens/sec, 100% Free Tier)
     if ((provider === "groq" || (provider === "auto" && groqKey)) && groqKey) {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -29,11 +33,11 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
           messages: [
-            { role: "system", content: systemPrompt },
+            { role: "system", content: enhancedSystemPrompt },
             { role: "user", content: prompt },
           ],
           stream: true,
-          max_tokens: 450,
+          max_tokens: 500,
           temperature: 0.7,
         }),
       });
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. GOOGLE GEMINI 2.0 / 1.5 FLASH STREAMING (Free Tier)
+    // 2. GOOGLE GEMINI 2.0 FLASH STREAMING WITH REAL-TIME GOOGLE SEARCH GROUNDING
     if ((provider === "gemini" || (provider === "auto" && geminiKey)) && geminiKey) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${geminiKey}`;
       const response = await fetch(url, {
@@ -59,12 +63,13 @@ export async function POST(req: NextRequest) {
           contents: [
             {
               role: "user",
-              parts: [{ text: `${systemPrompt}\n\nUser Question: ${prompt}` }],
+              parts: [{ text: `${enhancedSystemPrompt}\n\nUser Query: ${prompt}` }],
             },
           ],
+          tools: [{ googleSearch: {} }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 450,
+            maxOutputTokens: 600,
           },
         }),
       });
@@ -218,9 +223,11 @@ function createGeminiSSEStream(rawBody: ReadableStream<Uint8Array>): ReadableStr
 
           try {
             const parsed = JSON.parse(dataStr);
-            const token = parsed.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            if (token) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token, done: false, provider: "gemini" })}\n\n`));
+            const parts = parsed.candidates?.[0]?.content?.parts || [];
+            for (const part of parts) {
+              if (part.text) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: part.text, done: false, provider: "gemini" })}\n\n`));
+              }
             }
           } catch {}
         }
