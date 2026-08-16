@@ -168,10 +168,41 @@ export async function POST(req: Request) {
       }
     } catch {}
 
+    // 4. LIVE ZERO-COST SEARCH AI (Real-World Web Grounding with No Key Required)
+    try {
+      const liveAiUrl = "https://text.pollinations.ai/openai";
+      const liveAiRes = await fetch(liveAiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: enhancedSystemPrompt },
+            { role: "user", content: prompt },
+          ],
+          model: "openai-large",
+          search: true,
+          seed: Math.floor(Math.random() * 100000),
+        }),
+      });
+
+      if (liveAiRes.ok) {
+        const liveAiData = await liveAiRes.json();
+        const text = liveAiData.choices?.[0]?.message?.content?.trim();
+        if (text) {
+          return NextResponse.json({
+            text,
+            provider: "live-web-ai",
+            model: "Live Real-Time Web Search AI",
+          });
+        }
+      }
+    } catch {}
+
+    // 5. Emergency Factual Fallback
     return NextResponse.json({
-      text: `Processing query: "${prompt}". Connected to live telemetry and device automation racks.`,
-      provider: "auto",
-      model: "Local Core",
+      text: `SantoStark, the live global clock is ${liveTimeStr}. Please add your free Google AI Studio key in Settings for direct Gemini 2.0 real-time Google search grounding.`,
+      provider: "system",
+      model: "Stark Grid Core",
     });
   } catch (err: any) {
     return NextResponse.json(

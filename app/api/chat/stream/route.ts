@@ -116,15 +116,59 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. AUTO-FREE FALLBACK STREAM
-    const fallbackText = `SantoStark, all local diagnostics are nominal. Arc Reactor output is at 98.4% efficiency. Connected device telemetry standing by.`;
+    // 4. LIVE ZERO-COST SEARCH AI STREAMING GATEWAY (Real-World Web Grounding with No Key Required)
+    try {
+      const liveAiUrl = "https://text.pollinations.ai/openai";
+      const liveAiRes = await fetch(liveAiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: enhancedSystemPrompt },
+            { role: "user", content: prompt },
+          ],
+          model: "openai-large",
+          stream: true,
+          search: true,
+          seed: Math.floor(Math.random() * 100000),
+        }),
+      });
+
+      if (liveAiRes.ok && liveAiRes.body) {
+        return new Response(createSSEStream(liveAiRes.body, "live-web-ai"), {
+          headers: {
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("[Live AI Gateway Warning]", e);
+    }
+
+    // 5. LIVE WIKIPEDIA / DUCKDUCKGO EMERGENCY FACTUAL STREAM
+    let emergencyAnswer = `SantoStark, the live global grid reports current time is ${liveTimeStr}. For real-time query "${prompt}", please verify your Google Gemini API key in Settings.`;
+    try {
+      const topic = prompt.replace(/^(who is|what is|tell me about|what's the|what is the)\s+/i, "").replace(/[?.]+$/, "").trim();
+      if (topic.length > 2) {
+        const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`);
+        if (wikiRes.ok) {
+          const wikiData = await wikiRes.json();
+          if (wikiData.extract) {
+            emergencyAnswer = `SantoStark, live intel on ${wikiData.title}: ${wikiData.extract}`;
+          }
+        }
+      }
+    } catch {}
+
     const readable = new ReadableStream({
       async start(controller) {
-        const words = fallbackText.split(" ");
+        const words = emergencyAnswer.split(" ");
         for (const word of words) {
-          const payload = `data: ${JSON.stringify({ token: word + " ", done: false })}\n\n`;
+          const payload = `data: ${JSON.stringify({ token: word + " ", done: false, provider: "live-wiki" })}\n\n`;
           controller.enqueue(encoder.encode(payload));
-          await new Promise((r) => setTimeout(r, 25));
+          await new Promise((r) => setTimeout(r, 20));
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true })}\n\n`));
         controller.close();
