@@ -1,3 +1,5 @@
+import { realWorldIntel } from "./realtimeWorldIntel";
+
 export type AIProvider = "gemini" | "openai" | "claude" | "auto";
 
 export interface AIProviderKeys {
@@ -284,51 +286,23 @@ export class AIProviderService {
     prompt: string,
     persona: "jarvis" | "friday" | "ultron",
   ): Promise<string> {
+    // 1. Direct Siri/Bixby-Class Live Real-World Intel Engine
+    try {
+      const liveFact = await realWorldIntel.getLiveWorldIntel(prompt);
+      if (liveFact) {
+        return `SantoStark, ${liveFact.summary}`;
+      }
+    } catch {}
+
     const clean = prompt.toLowerCase().trim();
-
-    // Temporal date/time queries
-    if (clean.includes("date") || clean.includes("today") || clean.includes("what day")) {
-      const now = new Date();
-      const str = now.toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      return `Today is ${str}. All temporal and sensor matrices are synchronized.`;
-    }
-
-    if (clean.includes("time") || clean.includes("clock")) {
-      const now = new Date();
-      const str = now.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-      return `The current local time is ${str}.`;
-    }
 
     // Mathematical calculations
     const math = this.evalMath(clean);
     if (math) return `Computation verified: ${math}`;
 
-    // Live Web Knowledge Search (Wikipedia & DuckDuckGo Instant Answer)
-    const topic = clean
-      .replace(/^(who is|what is|where is|tell me about|explain|define|search for|how does|why is)\s+/i, "")
-      .replace(/[?.]+$/, "")
-      .trim();
-
-    if (topic.length > 1) {
-      const wikiSummary = await this.fetchWikipedia(topic);
-      if (wikiSummary) return wikiSummary;
-
-      const ddgSummary = await this.fetchDuckDuckGo(topic);
-      if (ddgSummary) return ddgSummary;
-    }
-
     // Persona-tailored intelligent response
     const name = persona === "friday" ? "F.R.I.D.A.Y." : persona === "ultron" ? "ULTRON" : "JARVIS";
-    return `${name} neural core operational. I have processed "${prompt}". Telemetry arrays and connected device racks are standing by.`;
+    return `${name} online. Query "${prompt}" registered on live grid. All connected device and sensor arrays standing by.`;
   }
 
   private evalMath(input: string): string | null {

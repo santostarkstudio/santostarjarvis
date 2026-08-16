@@ -96,6 +96,11 @@ export default function JarvisOrb() {
 
   useEffect(() => {
     if (showSettings) {
+      const keys = aiProviderService.getKeys();
+      setGeminiKeyInput(keys.geminiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
+      setOpenaiKeyInput(keys.openaiKey || "");
+      setClaudeKeyInput(keys.claudeKey || "");
+
       const config = supabaseVault.getConfig();
       setSupabaseUrlInput(config.supabaseUrl);
       setSupabaseKeyInput(config.supabaseAnonKey);
