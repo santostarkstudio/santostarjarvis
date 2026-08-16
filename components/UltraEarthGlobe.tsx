@@ -2,16 +2,19 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
+import { type HandPointer } from "@/lib/handTracker";
 
 interface UltraEarthGlobeProps {
   cardId?: string;
   themeColor?: string;
   isMaximized?: boolean;
+  handPointers?: HandPointer[];
 }
 
 export function UltraEarthGlobe({
   themeColor = "#00e5ff",
   isMaximized = false,
+  handPointers = [],
 }: UltraEarthGlobeProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<"globe3d" | "googleEarth">("globe3d");
@@ -28,8 +31,8 @@ export function UltraEarthGlobe({
   const [locationStatus, setLocationStatus] = useState<string>("LOCATING USER...");
   const [isRotating, setIsRotating] = useState<boolean>(true);
   const [showClouds, setShowClouds] = useState<boolean>(true);
-  const [showNightLights, setShowNightLights] = useState<boolean>(true);
   const [orbitSpeed, setOrbitSpeed] = useState<number>(1);
+  const [handGestureFeedback, setHandGestureFeedback] = useState<string>("OPTICAL SENSOR READY");
 
   // Three.js scene refs
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -38,9 +41,14 @@ export function UltraEarthGlobe({
   const earthMeshRef = useRef<THREE.Mesh | null>(null);
   const cloudsMeshRef = useRef<THREE.Mesh | null>(null);
   const beaconMeshRef = useRef<THREE.Group | null>(null);
+  const targetReticleRef = useRef<THREE.Group | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
+
+  // Interaction tracking refs
   const isDraggingRef = useRef(false);
   const previousMousePositionRef = useRef({ x: 0, y: 0 });
+  const previousHandPosRef = useRef<{ x: number; y: number } | null>(null);
+  const previousBimanualDistRef = useRef<number | null>(null);
 
   // 1. Fetch Real GPS Location
   useEffect(() => {
@@ -54,7 +62,6 @@ export function UltraEarthGlobe({
 
           let cityName = `LAT: ${lat.toFixed(4)}°, LON: ${lon.toFixed(4)}°`;
           try {
-            // Reverse geocode via free openstreetmap nominatim
             const geoRes = await fetch(
               `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`
             );
@@ -102,8 +109,8 @@ export function UltraEarthGlobe({
     if (viewMode !== "globe3d" || !mountRef.current) return;
 
     const container = mountRef.current;
-    const width = container.clientWidth || 320;
-    const height = container.clientHeight || 240;
+    const width = container.clientWidth || (isMaximized ? window.innerWidth : 360);
+    const height = container.clientHeight || (isMaximized ? window.innerHeight : 270);
 
     // Scene
     const scene = new THREE.Scene();
@@ -111,11 +118,15 @@ export function UltraEarthGlobe({
 
     // Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 0, 3.2);
+    camera.position.set(0, 0, isMaximized ? 2.8 : 3.2);
     cameraRef.current = camera;
 
     // Renderer with Anti-Aliasing and High Color Precision
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance",
+    });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -137,9 +148,6 @@ export function UltraEarthGlobe({
     );
     const specularTexture = textureLoader.load(
       "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_specular_2048.jpg"
-    );
-    const nightTexture = textureLoader.load(
-      "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_lights_2048.png"
     );
     const cloudsTexture = textureLoader.load(
       "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_clouds_1024.png"
@@ -224,7 +232,11 @@ export function UltraEarthGlobe({
 
     // Laser Beam shooting into orbital space
     const beamGeometry = new THREE.CylinderGeometry(0.003, 0.003, 0.25, 8);
-    const beamMaterial = new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.9 });
+    const beamMaterial = new THREE.MeshBasicMaterial({
+      color: 0x00e5ff,
+      transparent: true,
+      opacity: 0.9,
+    });
     const beamMesh = new THREE.Mesh(beamGeometry, beamMaterial);
     beamMesh.position.set(0, 0.125, 0);
     beaconGroup.add(beamMesh);
@@ -298,7 +310,7 @@ export function UltraEarthGlobe({
       if (!cameraRef.current) return;
       cameraRef.current.position.z = THREE.MathUtils.clamp(
         cameraRef.current.position.z + e.deltaY * 0.002,
-        1.4,
+        1.35,
         6.0
       );
     };
@@ -330,13 +342,92 @@ export function UltraEarthGlobe({
       resizeObserver.disconnect();
       renderer.dispose();
     };
-  }, [viewMode, userLocation, isRotating, showClouds, orbitSpeed, latLonToVector3]);
+  }, [viewMode, userLocation, isRotating, showClouds, orbitSpeed, latLonToVector3, isMaximized]);
+
+  // 3. ——— REAL-TIME OPTICAL HAND TRACKING GESTURE CONTROLLER ———
+  useEffect(() => {
+    if (viewMode !== "globe3d" || !earthMeshRef.current || handPointers.length === 0) {
+      previousHandPosRef.current = null;
+      previousBimanualDistRef.current = null;
+      return;
+    }
+
+    const container = mountRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+
+    // 1. Two-Hand Bimanual Zoom & Stretch (👐 / 🤏🤏)
+    if (handPointers.length >= 2) {
+      const p1 = handPointers[0];
+      const p2 = handPointers[1];
+      const currentDist = Math.hypot(p1.screenX - p2.screenX, p1.screenY - p2.screenY);
+
+      if (previousBimanualDistRef.current !== null && cameraRef.current) {
+        const deltaDist = currentDist - previousBimanualDistRef.current;
+        // Expanding hands zooms IN, bringing hands together zooms OUT
+        cameraRef.current.position.z = THREE.MathUtils.clamp(
+          cameraRef.current.position.z - deltaDist * 0.008,
+          1.35,
+          6.0
+        );
+        setHandGestureFeedback(`👐 BIMANUAL ZOOM: ${(cameraRef.current.position.z).toFixed(2)}x`);
+      }
+
+      previousBimanualDistRef.current = currentDist;
+      previousHandPosRef.current = null;
+      return;
+    }
+
+    // 2. Single Hand Tracking (Primary Hand)
+    const primary = handPointers[0];
+    const isInBounds =
+      isMaximized ||
+      (primary.screenX >= rect.left &&
+        primary.screenX <= rect.right &&
+        primary.screenY >= rect.top &&
+        primary.screenY <= rect.bottom);
+
+    if (!isInBounds) {
+      previousHandPosRef.current = null;
+      return;
+    }
+
+    // A. Pinch-to-Spin & Grab (🤏)
+    if (primary.isPinching || primary.pose === "pinch") {
+      setIsRotating(false); // Pause auto-rotation while user is manually spinning
+
+      if (previousHandPosRef.current) {
+        const deltaX = primary.screenX - previousHandPosRef.current.x;
+        const deltaY = primary.screenY - previousHandPosRef.current.y;
+
+        earthMeshRef.current.rotation.y += deltaX * 0.008;
+        earthMeshRef.current.rotation.x += deltaY * 0.008;
+
+        if (cloudsMeshRef.current) {
+          cloudsMeshRef.current.rotation.y += deltaX * 0.008;
+          cloudsMeshRef.current.rotation.x += deltaY * 0.008;
+        }
+
+        setHandGestureFeedback("🤏 PINCH ROTATING 3D EARTH");
+      }
+      previousHandPosRef.current = { x: primary.screenX, y: primary.screenY };
+    } else if (primary.pose === "palm") {
+      // B. Open Palm: Toggle gentle stabilization
+      previousHandPosRef.current = null;
+      setHandGestureFeedback("✋ PALM HOVER: HOLD TO STABILIZE");
+    } else if (primary.isPointing || primary.pose === "point") {
+      // C. Pointing: Target Coordinates Laser Focus
+      previousHandPosRef.current = null;
+      setHandGestureFeedback("👆 LASER RETICLE LOCKED ON COORDS");
+    } else {
+      previousHandPosRef.current = null;
+    }
+  }, [handPointers, viewMode, isMaximized]);
 
   // Center camera directly on user's GPS coordinates
   const handleFocusOnLocation = () => {
     if (!earthMeshRef.current) return;
     setIsRotating(false);
-    // Rotate Earth so user's lat/lon faces camera (0,0)
     const targetY = -((userLocation.lon + 90) * (Math.PI / 180));
     const targetX = (userLocation.lat * (Math.PI / 180)) * 0.5;
 
@@ -348,6 +439,22 @@ export function UltraEarthGlobe({
     }
   };
 
+  // Quick preset jump to regions
+  const handleJumpToRegion = (targetLat: number, targetLon: number, regionName: string) => {
+    if (!earthMeshRef.current) return;
+    setIsRotating(false);
+    const targetY = -((targetLon + 90) * (Math.PI / 180));
+    const targetX = (targetLat * (Math.PI / 180)) * 0.5;
+
+    earthMeshRef.current.rotation.y = targetY;
+    earthMeshRef.current.rotation.x = targetX;
+    if (cloudsMeshRef.current) {
+      cloudsMeshRef.current.rotation.y = targetY;
+      cloudsMeshRef.current.rotation.x = targetX;
+    }
+    setHandGestureFeedback(`🛰️ TARGET ACQUIRED: ${regionName}`);
+  };
+
   return (
     <div
       style={{
@@ -355,7 +462,7 @@ export function UltraEarthGlobe({
         height: "100%",
         position: "relative",
         background: "radial-gradient(circle at center, #071322 0%, #020711 100%)",
-        borderRadius: "8px",
+        borderRadius: isMaximized ? "0px" : "8px",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -369,35 +476,51 @@ export function UltraEarthGlobe({
           left: 0,
           right: 0,
           zIndex: 10,
-          background: "linear-gradient(180deg, rgba(3, 15, 30, 0.92) 0%, rgba(3, 15, 30, 0.4) 80%, transparent 100%)",
-          padding: "6px 10px",
+          background: "linear-gradient(180deg, rgba(3, 15, 30, 0.95) 0%, rgba(3, 15, 30, 0.5) 80%, transparent 100%)",
+          padding: isMaximized ? "10px 16px" : "6px 10px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          borderBottom: "1px solid rgba(0, 229, 255, 0.2)",
-          backdropFilter: "blur(4px)",
+          borderBottom: "1px solid rgba(0, 229, 255, 0.25)",
+          backdropFilter: "blur(6px)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <span style={{ fontSize: "12px", color: "#00e5ff", fontWeight: "bold", textShadow: "0 0 8px #00e5ff" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: isMaximized ? "15px" : "12px", color: "#00e5ff", fontWeight: "bold", textShadow: "0 0 8px #00e5ff" }}>
             🌍 STARK ORBITAL EARTH 4K
           </span>
           <span
             style={{
-              fontSize: "9px",
+              fontSize: isMaximized ? "11px" : "9px",
               background: "rgba(0, 229, 255, 0.15)",
               color: "#00e5ff",
               border: "1px solid rgba(0, 229, 255, 0.4)",
               borderRadius: "4px",
-              padding: "1px 5px",
+              padding: "2px 6px",
             }}
           >
             {locationStatus}
           </span>
+          {/* Hand Tracking Active Badge */}
+          {handPointers.length > 0 && (
+            <span
+              style={{
+                fontSize: "9px",
+                background: "rgba(0, 255, 136, 0.2)",
+                color: "#00ff88",
+                border: "1px solid #00ff88",
+                borderRadius: "4px",
+                padding: "2px 6px",
+                fontWeight: "bold",
+              }}
+            >
+              🖐️ HAND TRACKING ACTIVE
+            </span>
+          )}
         </div>
 
         {/* View Mode Selector */}
-        <div style={{ display: "flex", gap: "4px" }}>
+        <div style={{ display: "flex", gap: "6px" }}>
           <button
             type="button"
             style={{
@@ -405,8 +528,8 @@ export function UltraEarthGlobe({
               border: viewMode === "globe3d" ? "1px solid #00e5ff" : "1px solid rgba(0, 229, 255, 0.25)",
               color: "#ffffff",
               borderRadius: "4px",
-              padding: "2px 8px",
-              fontSize: "10px",
+              padding: isMaximized ? "4px 12px" : "2px 8px",
+              fontSize: isMaximized ? "12px" : "10px",
               cursor: "pointer",
               fontWeight: viewMode === "globe3d" ? "bold" : "normal",
             }}
@@ -421,8 +544,8 @@ export function UltraEarthGlobe({
               border: viewMode === "googleEarth" ? "1px solid #00e5ff" : "1px solid rgba(0, 229, 255, 0.25)",
               color: "#ffffff",
               borderRadius: "4px",
-              padding: "2px 8px",
-              fontSize: "10px",
+              padding: isMaximized ? "4px 12px" : "2px 8px",
+              fontSize: isMaximized ? "12px" : "10px",
               cursor: "pointer",
               fontWeight: viewMode === "googleEarth" ? "bold" : "normal",
             }}
@@ -444,7 +567,7 @@ export function UltraEarthGlobe({
           }}
         />
       ) : (
-        <div style={{ width: "100%", height: "100%", paddingTop: "32px", position: "relative" }}>
+        <div style={{ width: "100%", height: "100%", paddingTop: "36px", position: "relative" }}>
           <iframe
             src={`https://maps.google.com/maps?q=${encodeURIComponent(
               `${userLocation.lat},${userLocation.lon}`
@@ -460,41 +583,96 @@ export function UltraEarthGlobe({
         </div>
       )}
 
-      {/* Bottom Floating Control Deck */}
+      {/* Maximized Quick Region Presets Toolbar */}
+      {isMaximized && viewMode === "globe3d" && (
+        <div
+          style={{
+            position: "absolute",
+            top: "54px",
+            left: "16px",
+            display: "flex",
+            gap: "6px",
+            zIndex: 10,
+          }}
+        >
+          {[
+            { name: "🇮🇳 INDIA", lat: 20.5937, lon: 78.9629 },
+            { name: "🇺🇸 AMERICA", lat: 37.0902, lon: -95.7129 },
+            { name: "🇪🇺 EUROPE", lat: 54.526, lon: 15.2551 },
+            { name: "🇯🇵 ASIA-PACIFIC", lat: 34.0479, lon: 100.6197 },
+            { name: "🌍 AFRICA", lat: -8.7832, lon: 34.5085 },
+            { name: "🇦🇺 OCEANIA", lat: -25.2744, lon: 133.7751 },
+          ].map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              style={{
+                background: "rgba(3, 15, 30, 0.8)",
+                border: "1px solid rgba(0, 229, 255, 0.3)",
+                color: "#ffffff",
+                borderRadius: "4px",
+                padding: "3px 8px",
+                fontSize: "11px",
+                cursor: "pointer",
+                backdropFilter: "blur(4px)",
+              }}
+              onClick={() => handleJumpToRegion(r.lat, r.lon, r.name)}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Bottom Floating Control & Gesture Telemetry Deck */}
       {viewMode === "globe3d" && (
         <div
           style={{
             position: "absolute",
-            bottom: "8px",
-            left: "8px",
-            right: "8px",
+            bottom: isMaximized ? "16px" : "8px",
+            left: isMaximized ? "16px" : "8px",
+            right: isMaximized ? "16px" : "8px",
             zIndex: 10,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            background: "rgba(3, 15, 30, 0.85)",
-            border: "1px solid rgba(0, 229, 255, 0.25)",
+            background: "rgba(3, 15, 30, 0.9)",
+            border: "1px solid rgba(0, 229, 255, 0.3)",
             borderRadius: "6px",
-            padding: "4px 8px",
+            padding: isMaximized ? "8px 14px" : "4px 8px",
             backdropFilter: "blur(6px)",
           }}
         >
-          {/* Coordinates readout */}
-          <div style={{ fontSize: "9px", color: "rgba(255, 255, 255, 0.8)", fontFamily: "monospace" }}>
-            📍 <span style={{ color: "#00e5ff" }}>{userLocation.lat.toFixed(4)}° N, {userLocation.lon.toFixed(4)}° E</span>
+          {/* Coordinates & Gesture Feedback */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ fontSize: isMaximized ? "12px" : "9px", color: "rgba(255, 255, 255, 0.8)", fontFamily: "monospace" }}>
+              📍 <span style={{ color: "#00e5ff" }}>{userLocation.lat.toFixed(4)}° N, {userLocation.lon.toFixed(4)}° E</span>
+            </div>
+            <div
+              style={{
+                fontSize: isMaximized ? "11px" : "8px",
+                color: "#00ff88",
+                background: "rgba(0, 255, 136, 0.12)",
+                padding: "2px 6px",
+                borderRadius: "3px",
+                fontFamily: "monospace",
+              }}
+            >
+              {handGestureFeedback}
+            </div>
           </div>
 
           {/* Quick interactive controls */}
-          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
             <button
               type="button"
               style={{
-                background: "rgba(0, 229, 255, 0.15)",
+                background: "rgba(0, 229, 255, 0.2)",
                 border: "1px solid rgba(0, 229, 255, 0.4)",
                 color: "#ffffff",
-                borderRadius: "3px",
-                padding: "2px 6px",
-                fontSize: "9px",
+                borderRadius: "4px",
+                padding: isMaximized ? "4px 10px" : "2px 6px",
+                fontSize: isMaximized ? "11px" : "9px",
                 cursor: "pointer",
               }}
               onClick={handleFocusOnLocation}
@@ -509,9 +687,9 @@ export function UltraEarthGlobe({
                 background: isRotating ? "rgba(0, 229, 255, 0.25)" : "rgba(255, 255, 255, 0.08)",
                 border: "1px solid rgba(0, 229, 255, 0.3)",
                 color: "#ffffff",
-                borderRadius: "3px",
-                padding: "2px 6px",
-                fontSize: "9px",
+                borderRadius: "4px",
+                padding: isMaximized ? "4px 10px" : "2px 6px",
+                fontSize: isMaximized ? "11px" : "9px",
                 cursor: "pointer",
               }}
               onClick={() => setIsRotating(!isRotating)}
@@ -526,9 +704,9 @@ export function UltraEarthGlobe({
                 background: showClouds ? "rgba(0, 229, 255, 0.25)" : "rgba(255, 255, 255, 0.08)",
                 border: "1px solid rgba(0, 229, 255, 0.3)",
                 color: "#ffffff",
-                borderRadius: "3px",
-                padding: "2px 6px",
-                fontSize: "9px",
+                borderRadius: "4px",
+                padding: isMaximized ? "4px 10px" : "2px 6px",
+                fontSize: isMaximized ? "11px" : "9px",
                 cursor: "pointer",
               }}
               onClick={() => setShowClouds(!showClouds)}

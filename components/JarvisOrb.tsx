@@ -23,6 +23,10 @@ import { supabaseVault } from "@/lib/supabaseVault";
 import { starkVisionScanner } from "@/lib/visionScanner";
 import { starkMusicRecognizer } from "@/lib/musicRecognizer";
 import { UltraEarthGlobe } from "@/components/UltraEarthGlobe";
+import { starkFullDuplex } from "@/lib/fullDuplexVoice";
+import { starkHelmetParallax, type ParallaxState } from "@/lib/headTrackingParallax";
+import { starkResearchAgent } from "@/lib/researchAgent";
+import { starkSystemControl, type SystemTelemetryState } from "@/lib/systemControl";
 
 type CameraState = "off" | "starting" | "on" | "error";
 
@@ -179,6 +183,20 @@ export default function JarvisOrb() {
     { id: string; x: number; y: number; radius: number; maxRadius: number; opacity: number }[]
   >([]);
 
+  // 4 Advanced Systems State
+  const [isHandsFreeActive, setIsHandsFreeActive] = useState(false);
+  const [isParallaxActive, setIsParallaxActive] = useState(false);
+  const [parallaxState, setParallaxState] = useState<ParallaxState>({
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    shiftX: 0,
+    shiftY: 0,
+    depthZ: 1.0,
+    isTracking: false,
+  });
+  const [systemState, setSystemState] = useState<SystemTelemetryState>(starkSystemControl.getState());
+
   const [telemetry, setTelemetry] = useState<SceneTelemetry>({
     fps: 60,
     drawCalls: 0,
@@ -195,6 +213,46 @@ export default function JarvisOrb() {
     toastTimeoutRef.current = setTimeout(() => {
       setToastMessage(null);
     }, 2800);
+  }, []);
+
+  // Initialize System Control & Parallax Subscriptions
+  useEffect(() => {
+    const unsubSystem = starkSystemControl.subscribe((s) => {
+      setSystemState(s);
+    });
+
+    starkHelmetParallax.init((p) => {
+      setParallaxState(p);
+      if (sceneRef.current) {
+        // Shift Three.js camera slightly with head movement for realistic 3D depth
+        sceneRef.current.setParallaxOffset?.(p.shiftX * 0.005, p.shiftY * 0.005);
+      }
+    });
+
+    starkFullDuplex.init({
+      onTranscript: (text, isFinal) => {
+        setUserTranscript(text);
+        if (isFinal && text.trim()) {
+          voiceSystemRef.current?.processTranscriptDirect(text);
+        }
+      },
+      onUserSpeakingStart: () => setIsListening(true),
+      onUserSpeakingEnd: () => setIsListening(false),
+      onSystemInterrupt: () => {
+        // When user speaks mid-sentence, interrupt Jarvis speech
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+        setIsSpeaking(false);
+      },
+      onError: (err) => console.warn("[FullDuplex]", err),
+    });
+
+    return () => {
+      unsubSystem();
+      starkFullDuplex.stopHandsFree();
+      starkHelmetParallax.disable();
+    };
   }, []);
 
   // ——— FORENSIC SCAN EXECUTION ———
@@ -547,6 +605,45 @@ export default function JarvisOrb() {
         if (result.song) {
           spatialWorkspace.addAppTab("youtube", { query: result.song.youtubeQuery });
           showToast(`🎬 DEPLOYED // ${result.song.title} on HUD`);
+        }
+      },
+      // ——— AUTONOMOUS RESEARCH DOSSIER BUILDER ———
+      onCompileResearch: async (topic: string) => {
+        showToast(`📊 COMPILING DOSSIER // ${topic.toUpperCase()}`);
+        audioEngine.playScan();
+        setAiResponse(`Initiating autonomous research sweep for '${topic}'. Aggregating verified data, metrics, and strategic insights...`);
+        const result = await starkResearchAgent.compileDossier(topic);
+        setAiResponse(result.message);
+        voiceSystemRef.current?.speak(result.message);
+      },
+      // ——— SMART SYSTEM & ENVIRONMENT CONTROLS ———
+      onSystemControl: (action: string, value?: any) => {
+        if (action === "brightness") {
+          starkSystemControl.setBrightness(value);
+          showToast(`💡 HUD BRIGHTNESS: ${value}%`);
+        } else if (action === "lockdown") {
+          starkSystemControl.setLabMode("lockdown");
+          handleThemeChange("ultron");
+          audioEngine.playAlert();
+          showToast("🚨 RED ALERT // LAB LOCKDOWN ENGAGED");
+        } else if (action === "stealth") {
+          starkSystemControl.setLabMode("stealth");
+          handleThemeChange("matrix");
+          audioEngine.playShield();
+          showToast("🕶️ STEALTH MODE // MASKED ILLUMINATION");
+        } else if (action === "normal") {
+          starkSystemControl.setLabMode("normal");
+          handleThemeChange("amber");
+          audioEngine.playBoot();
+          showToast("🛡️ NORMAL PARAMETERS RESTORED");
+        } else if (action === "mute") {
+          starkSystemControl.setVolume(0);
+          setIsSfxMuted(true);
+          showToast("🔇 AUDIO MUTED");
+        } else if (action === "unmute") {
+          starkSystemControl.setVolume(100);
+          setIsSfxMuted(false);
+          showToast("🔊 AUDIO RESTORED");
         }
       },
     });
@@ -1767,6 +1864,7 @@ export default function JarvisOrb() {
                       cardId={card.id}
                       themeColor={THEMES[activeTheme].primaryHex}
                       isMaximized={maximizedCardId === card.id}
+                      handPointers={handPointers}
                     />
                   </div>
                 ) : card.category === "spotify" ? (
@@ -1922,12 +2020,13 @@ export default function JarvisOrb() {
                     <path d="M 115 45 L 105 48 L 112 52 Z" fill="var(--theme-primary)" />
                   </svg>
                 ) : card.svgType === "arc" || card.category === "reactor" ? (
-                  // Live 4K Ultra Reality Rotating Earth with GPS Lock
+                  // Live 4K Ultra Reality Rotating Earth with GPS Lock & Hand Interaction
                   <div style={{ width: "100%", height: "100%", minHeight: "160px" }}>
                     <UltraEarthGlobe
                       cardId={card.id}
                       themeColor={THEMES[activeTheme].primaryHex}
                       isMaximized={maximizedCardId === card.id}
+                      handPointers={handPointers}
                     />
                   </div>
                 ) : card.svgType === "satellite" ? (
@@ -2050,12 +2149,15 @@ export default function JarvisOrb() {
             <span className="badge-val">{telemetry.coreOutput}%</span>
           </div>
           <div className="hud-badge">
-            <span className="badge-label">TEMP</span>
-            <span className="badge-val">{telemetry.coreTemp} K</span>
+            <span className="badge-label">PWR</span>
+            <span className="badge-val">
+              {systemState.batteryLevel !== null ? `${systemState.batteryLevel}%` : "100%"}
+              {systemState.isCharging ? " ⚡" : ""}
+            </span>
           </div>
           <div className="hud-badge">
-            <span className="badge-label">FLUX</span>
-            <span className="badge-val">{telemetry.fluxDensity} T</span>
+            <span className="badge-label">LUMEN</span>
+            <span className="badge-val">{systemState.brightness}%</span>
           </div>
           <div className="hud-badge">
             <span className="badge-label">FPS</span>
@@ -2096,6 +2198,21 @@ export default function JarvisOrb() {
       {/* TOP SPATIAL WORKSPACE TOOLBAR */}
       {/* ═══════════════════════════════════════════════ */}
       <div className="spatial-action-bar">
+        {/* Full-Duplex Hands-Free Voice Button */}
+        <button
+          type="button"
+          className={`spatial-bar-btn ${isHandsFreeActive ? "active" : ""}`}
+          onClick={() => {
+            const active = starkFullDuplex.toggleHandsFree();
+            setIsHandsFreeActive(active);
+            audioEngine.playBoot();
+            showToast(active ? "🎙️ HANDS-FREE TRANSCEIVER ENGAGED" : "🎙️ HANDS-FREE STANDBY");
+          }}
+          title="Toggle Full-Duplex Hands-Free Voice Transceiver (Walkie-Talkie Mode)"
+        >
+          🎙️ {isHandsFreeActive ? "HANDS-FREE ON" : "HANDS-FREE"}
+        </button>
+
         <button
           type="button"
           className={`spatial-bar-btn ${isDrawMode ? "active" : ""}`}

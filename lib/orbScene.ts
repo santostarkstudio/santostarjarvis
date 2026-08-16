@@ -30,6 +30,7 @@ export interface OrbSceneApi {
   toggleExplode(): boolean;
   toggleCompress(): boolean;
   getTelemetry(): SceneTelemetry;
+  setParallaxOffset?(x: number, y: number): void;
   dispose(): void;
 }
 
@@ -889,6 +890,10 @@ export function createOrbScene(
     setCompress,
     toggleExplode,
     toggleCompress,
+    setParallaxOffset: (px: number, py: number) => {
+      camera.position.x = HOME_POSITION.x + px;
+      camera.position.y = HOME_POSITION.y + py;
+    },
     getTelemetry,
     dispose,
   };

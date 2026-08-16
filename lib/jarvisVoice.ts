@@ -45,6 +45,8 @@ export interface VoiceCommandCallbacks {
   onAnalyzeCameraObject?(prompt?: string): void;
   onAnalyzeScreen?(prompt?: string): void;
   onRecognizeMusic?(query?: string): void;
+  onCompileResearch?(topic: string): void;
+  onSystemControl?(action: string, value?: any): void;
 }
 
 interface IWindow extends Window {
@@ -347,6 +349,10 @@ export class JarvisVoiceSystem {
     }
   }
 
+  public async processTranscriptDirect(input: string): Promise<void> {
+    return this.handleVoiceInput(input);
+  }
+
   public async handleVoiceInput(input: string): Promise<void> {
     const trimmed = input.trim();
     if (!trimmed) return;
@@ -432,7 +438,69 @@ export class JarvisVoiceSystem {
       }
     }
 
-    // 5. ——— STARK FORENSIC SCANNER (Strict Commands) ———
+    // 5. ——— AUTONOMOUS RESEARCH AGENT & DOSSIER BUILDER ———
+    const researchMatch = lower.match(
+      /^(hey )?(jarvis|friday|ultron)?\s*(research|compile (a )?dossier on|look up research on|deep dive (into|on)|generate dossier on|investigate)\s+(.+)/i
+    );
+    if (researchMatch && researchMatch[6]) {
+      const topic = researchMatch[6].trim();
+      if (this.callbacks.onCompileResearch) {
+        this.callbacks.onCompileResearch(topic);
+        return;
+      }
+    }
+
+    // 6. ——— SMART SYSTEM & ENVIRONMENT CONTROLS ———
+    const brightnessMatch = lower.match(/(set )?brightness (to )?(\d+)%/i);
+    if (brightnessMatch && brightnessMatch[3]) {
+      const val = parseInt(brightnessMatch[3], 10);
+      this.callbacks.onSystemControl?.("brightness", val);
+      const resp = `Adjusting HUD display illumination to ${val}%.`;
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(lock down lab|lockdown protocol|red alert)$/i.test(lower)) {
+      this.callbacks.onSystemControl?.("lockdown");
+      const resp = "Lockdown protocol engaged. Spatial cards secured and perimeter alarms active.";
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(engage stealth mode|stealth protocol|dark mode)$/i.test(lower)) {
+      this.callbacks.onSystemControl?.("stealth");
+      const resp = "Stealth mode active. HUD luminescence dimmed and acoustic signatures masked.";
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(stand down|normal mode|cancel lockdown|restore lab)$/i.test(lower)) {
+      this.callbacks.onSystemControl?.("normal");
+      const resp = "Threat level nominal. Restoring standard laboratory parameters.";
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(mute audio|mute sfx|quiet mode)$/i.test(lower)) {
+      this.callbacks.onSystemControl?.("mute");
+      const resp = "Acoustic audio telemetry muted.";
+      this.callbacks.onResponse(resp);
+      return;
+    }
+
+    if (/^(unmute audio|unmute sfx|enable sound)$/i.test(lower)) {
+      this.callbacks.onSystemControl?.("unmute");
+      const resp = "Audio telemetry restored.";
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    // 7. ——— STARK FORENSIC SCANNER (Strict Commands) ———
     if (
       /^(scan this|is this ai|is this real|scan photo|scan video|verify news|is this fake|deepfake scan|run forensic scan)$/i.test(lower)
     ) {
