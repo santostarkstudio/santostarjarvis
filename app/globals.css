@@ -283,10 +283,10 @@ body {
 /* ——— HUD PANELS & CARDS (COMPACT & SYMMETRIC) ——— */
 .hud-left-panel {
   position: fixed;
-  top: 70px;
+  top: 110px;
   left: 14px;
   width: 236px;
-  max-height: calc(100vh - 90px);
+  max-height: calc(100vh - 130px);
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 30;
@@ -308,10 +308,10 @@ body {
 
 .hud-right-panel {
   position: fixed;
-  top: 70px;
+  top: 110px;
   right: 14px;
   width: 236px;
-  max-height: calc(100vh - 90px);
+  max-height: calc(100vh - 130px);
   overflow-y: auto;
   overflow-x: hidden;
   z-index: 30;
