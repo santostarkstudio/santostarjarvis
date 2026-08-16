@@ -330,13 +330,8 @@ export class JarvisVoiceSystem {
     this.callbacks.onTranscript(trimmed);
     const lower = trimmed.toLowerCase();
 
-    // 1. ——— REAL-TIME DATE & TIME QUERIES ———
-    if (
-      lower.includes("date") ||
-      lower.includes("today") ||
-      lower.includes("what day") ||
-      lower.includes("day is it")
-    ) {
+    // 1. ——— REAL-TIME DATE & TIME QUERIES (Strict Match Only) ———
+    if (/^(what('s| is) (the )?(current )?date|what day is (it|today)|what is today('s)? date|tell me the date|current date)$/i.test(lower)) {
       const now = new Date();
       const options: Intl.DateTimeFormatOptions = {
         weekday: "long",
@@ -351,11 +346,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (
-      lower.includes("time") ||
-      lower.includes("clock") ||
-      lower.includes("current time")
-    ) {
+    if (/^(what('s| is) (the )?(current )?time|what time is it|tell me the time|current time)$/i.test(lower)) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -368,17 +359,9 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 2. ——— STARK FORENSIC SCANNER (AI VS REAL & DEEPFAKE DETECTION) ———
+    // 2. ——— STARK FORENSIC SCANNER (Strict Commands) ———
     if (
-      lower.includes("scan this") ||
-      lower.includes("is this ai") ||
-      lower.includes("is this real") ||
-      lower.includes("scan photo") ||
-      lower.includes("scan video") ||
-      lower.includes("verify news") ||
-      lower.includes("is this fake") ||
-      lower.includes("deepfake") ||
-      lower.includes("forensic")
+      /^(scan this|is this ai|is this real|scan photo|scan video|verify news|is this fake|deepfake scan|run forensic scan)$/i.test(lower)
     ) {
       if (this.callbacks.onScanForensics) {
         this.callbacks.onScanForensics();
@@ -390,7 +373,7 @@ export class JarvisVoiceSystem {
     }
 
     // 3. ——— HOLOGRAPHIC APP TABS & SPATIAL WEB BROWSER ———
-    if (lower.includes("open new tab") || lower.includes("open empty tab") || lower.includes("new tab")) {
+    if (/^(open new tab|open empty tab|new tab)$/i.test(lower)) {
       this.callbacks.onOpenAppTab?.("empty");
       const resp = "Deploying empty holographic workspace tab.";
       this.callbacks.onResponse(resp);
@@ -398,7 +381,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("youtube") || lower.includes("play video")) {
+    if (/^(open youtube|play youtube|play video)/i.test(lower)) {
       const q = input
         .replace(/^(jarvis|friday|ultron)?\s*(open|play)?\s*(youtube|video)?\s*(and\s*search\s*for|and\s*play|and\s*search|for|about)?/i, "")
         .trim() || "Iron Man HUD UI";
@@ -409,7 +392,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("map") || lower.includes("satellite")) {
+    if (/^(open map|show map|satellite map)/i.test(lower)) {
       const loc = input
         .replace(/^(jarvis|friday|ultron)?\s*(open|show)?\s*(map|google\s*maps|satellite)?\s*(of|for)?/i, "")
         .trim() || "Manhattan, New York";

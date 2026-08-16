@@ -162,13 +162,28 @@ export async function POST(req: NextRequest) {
 
     if (!liveFact) {
       try {
-        const topic = prompt.replace(/^(who is|what is|tell me about|what's the|what is the)\s+/i, "").replace(/[?.]+$/, "").trim();
-        if (topic.length > 2) {
-          const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`);
+        const cleanTopic = prompt
+          .replace(/^(jarvis|friday|ultron)?\s*(who is|what is|tell me about|what's the|what is the|explain|how does|why is|define)\s+/i, "")
+          .replace(/[?.]+$/, "")
+          .trim();
+
+        if (cleanTopic.length > 1) {
+          // Direct Page Summary
+          const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanTopic)}`);
           if (wikiRes.ok) {
             const wikiData = await wikiRes.json();
             if (wikiData.extract) {
               emergencyAnswer = `SantoStark, live intel on ${wikiData.title}: ${wikiData.extract}`;
+            }
+          } else {
+            // Wikipedia Full-Text Search fallback
+            const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanTopic)}&format=json&origin=*`);
+            if (searchRes.ok) {
+              const searchData = await searchRes.json();
+              if (searchData.query?.search?.[0]?.snippet) {
+                const cleanSnippet = searchData.query.search[0].snippet.replace(/<[^>]+>/g, "");
+                emergencyAnswer = `SantoStark, analysis for ${searchData.query.search[0].title}: ${cleanSnippet}.`;
+              }
             }
           }
         }

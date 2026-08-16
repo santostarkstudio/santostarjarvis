@@ -17,8 +17,30 @@ export class RealWorldIntelEngine {
   public async getLiveWorldIntel(query: string): Promise<RealWorldFact | null> {
     const q = query.toLowerCase().trim();
 
-    // 1. TIME & DATE
-    if (/\b(time|clock|current time|what time)\b/i.test(q)) {
+    // 1. LIVE WORLD NEWS & HEADLINES (High Priority)
+    if (/\b(news|headlines|current events|happening in the world|world news|breaking news)\b/i.test(q)) {
+      const news = await this.fetchLiveNews();
+      if (news) return news;
+    }
+
+    // 2. LIVE REAL-TIME WEATHER (High Priority)
+    if (/\b(weather|temperature|forecast|climate|rain|is it raining|humidity|hot|cold)\b/i.test(q)) {
+      const cityMatch = query.match(/(?:in|for|at)\s+([a-zA-Z\s]+?)(?:\s+today|\s+now|\s+tomorrow|\?|$)/i) ||
+                         query.match(/([a-zA-Z\s]+)\s+weather/i);
+      const city = cityMatch ? cityMatch[1].trim() : "New York";
+      const weather = await this.fetchLiveWeather(city);
+      if (weather) return weather;
+    }
+
+    // 3. LIVE CRYPTO & FINANCIAL PRICES (High Priority)
+    if (/\b(bitcoin|btc|ethereum|eth|crypto|crypto price|solana|doge)\b/i.test(q)) {
+      const coin = q.includes("ethereum") || q.includes("eth") ? "ethereum" : (q.includes("solana") ? "solana" : "bitcoin");
+      const crypto = await this.fetchCryptoPrice(coin);
+      if (crypto) return crypto;
+    }
+
+    // 4. TIME & DATE (Strict Match Only - Never match general sentences with "today")
+    if (/^(what('s| is) (the )?(current )?time|what time is it|tell me the time|time check|current time)\b/i.test(q)) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -30,7 +52,8 @@ export class RealWorldIntelEngine {
       };
     }
 
-    if (/\b(date|today|day|what is today|what date|current date)\b/i.test(q)) {
+    if (/^(what('s| is) (the )?(current )?date|what day is (it|today)|what is today('s)? date|tell me the date|current date)$/i.test(q) ||
+        /^today('s)? date$/i.test(q)) {
       const now = new Date();
       const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
       return {
@@ -39,28 +62,6 @@ export class RealWorldIntelEngine {
         summary: `Today is ${dateStr}.`,
         source: "Global Calendar",
       };
-    }
-
-    // 2. LIVE REAL-TIME WEATHER
-    if (/\b(weather|temperature|forecast|climate|rain|is it raining|humidity|hot|cold)\b/i.test(q)) {
-      const cityMatch = query.match(/(?:in|for|at)\s+([a-zA-Z\s]+?)(?:\s+today|\s+now|\s+tomorrow|\?|$)/i) ||
-                         query.match(/([a-zA-Z\s]+)\s+weather/i);
-      const city = cityMatch ? cityMatch[1].trim() : "New York";
-      const weather = await this.fetchLiveWeather(city);
-      if (weather) return weather;
-    }
-
-    // 3. LIVE WORLD NEWS & HEADLINES
-    if (/\b(news|headlines|current events|happening in the world|world news|breaking news)\b/i.test(q)) {
-      const news = await this.fetchLiveNews();
-      if (news) return news;
-    }
-
-    // 4. LIVE CRYPTO & FINANCIAL PRICES
-    if (/\b(bitcoin|btc|ethereum|eth|crypto|crypto price|solana|doge)\b/i.test(q)) {
-      const coin = q.includes("ethereum") || q.includes("eth") ? "ethereum" : (q.includes("solana") ? "solana" : "bitcoin");
-      const crypto = await this.fetchCryptoPrice(coin);
-      if (crypto) return crypto;
     }
 
     // 5. LIVE ENCYCLOPEDIC & WORLD FACTS (WIKIPEDIA GRAPH)
@@ -117,45 +118,63 @@ export class RealWorldIntelEngine {
   }
 
   /**
-   * 2. Live Real-Time World News via Live RSS feeds / BBC / Reuters / HackerNews
+   * 2. Live Real-Time World News via Live Google News & Global Wires (100% CORS & Real-Time)
    */
   private async fetchLiveNews(): Promise<RealWorldFact | null> {
+    // 1. Google News Live RSS Feed
     try {
-      // Fetch top real headlines from open news feeds
-      const res = await fetch("https://api.spaceflightnewsapi.net/v4/articles/?limit=3");
+      const res = await fetch("https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fnews.google.com%2Frss%3Fhl%3Den-US%26gl%3DUS%26ceid%3DUS%3Aen");
       if (res.ok) {
         const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          const topStories = data.results.map((r: any, idx: number) => `${idx + 1}. ${r.title} (${r.news_site})`).join(" ");
+        if (data.items && data.items.length > 0) {
+          const topStories = data.items.slice(0, 3).map((item: any, i: number) => {
+            const cleanTitle = item.title.replace(/\s*-\s*[^-]+$/, "").trim();
+            return `${i + 1}. ${cleanTitle}.`;
+          }).join(" ");
+
           return {
             type: "news",
             headline: "Top Real-Time Global Headlines",
-            summary: `Here are the latest breaking global developments: ${topStories}`,
-            source: "Global Live News Wire",
+            summary: `Here are the latest live headlines right now: ${topStories}`,
+            source: "Live Google News World Feed",
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("[Google News RSS Error]", e);
+    }
+
+    // 2. BBC World News Feed
+    try {
+      const res = await fetch("https://api.rss2json.com/v1/api.json?rss_url=http%3A%2F%2Ffeeds.bbci.co.uk%2Fnews%2Fworld%2Frss.xml");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.items && data.items.length > 0) {
+          const topStories = data.items.slice(0, 3).map((item: any, i: number) => `${i + 1}. ${item.title}`).join(" ");
+          return {
+            type: "news",
+            headline: "BBC World News Live",
+            summary: `Latest global developments: ${topStories}`,
+            source: "BBC World News Wire",
           };
         }
       }
     } catch {}
 
+    // 3. Algolia Global Top Stories
     try {
-      // Secondary live news provider (HackerNews Top Live World Tech & Global News)
-      const res = await fetch("https://hacker-news.firebaseio.com/v0/topstories.json");
+      const res = await fetch("https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=3");
       if (res.ok) {
-        const ids = await res.json();
-        const top3Ids = ids.slice(0, 3);
-        const articles = await Promise.all(
-          top3Ids.map(async (id: number) => {
-            const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`);
-            return itemRes.json();
-          })
-        );
-        const titles = articles.filter(Boolean).map((a: any, i) => `${i + 1}. ${a.title}`).join(" | ");
-        return {
-          type: "news",
-          headline: "Latest Global Tech & World Headlines",
-          summary: `Top live news right now: ${titles}`,
-          source: "Live Global Intelligence Feed",
-        };
+        const data = await res.json();
+        if (data.hits && data.hits.length > 0) {
+          const titles = data.hits.map((h: any, i: number) => `${i + 1}. ${h.title}`).join(" ");
+          return {
+            type: "news",
+            headline: "Global Intelligence Wire",
+            summary: `Live headlines: ${titles}`,
+            source: "Live Global News Network",
+          };
+        }
       }
     } catch (e) {
       console.warn("[News Feed Error]", e);
@@ -164,25 +183,45 @@ export class RealWorldIntelEngine {
   }
 
   /**
-   * 3. Live Crypto & Asset Prices via CoinGecko API (100% Free)
+   * 3. Live Crypto & Asset Prices via CoinGecko + Binance (100% Free & Fast)
    */
   private async fetchCryptoPrice(coin: string): Promise<RealWorldFact | null> {
+    // 1. Binance Direct Ticker (Ultra-fast)
     try {
-      const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd,inr&include_24hr_change=true`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      const asset = data[coin];
-      if (asset) {
-        const usd = asset.usd.toLocaleString();
-        const inr = asset.inr.toLocaleString();
-        const change = asset.usd_24h_change ? asset.usd_24h_change.toFixed(2) : "0";
-        const symbol = coin.toUpperCase();
+      const symbol = coin.includes("eth") ? "ETHUSDT" : (coin.includes("sol") ? "SOLUSDT" : "BTCUSDT");
+      const coinName = coin.includes("eth") ? "Ethereum" : (coin.includes("sol") ? "Solana" : "Bitcoin");
+      const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+      if (res.ok) {
+        const data = await res.json();
+        const priceUsd = Number(data.price).toLocaleString("en-US", { maximumFractionDigits: 2 });
+        const priceInr = (Number(data.price) * 87.5).toLocaleString("en-IN", { maximumFractionDigits: 0 });
         return {
           type: "crypto",
-          headline: `${symbol} Live Price: $${usd} USD (₹${inr} INR) [${change}% 24h]`,
-          summary: `${symbol} is currently trading at $${usd} USD (approximately ₹${inr} INR), with a 24-hour change of ${change}%.`,
-          source: "Global Decentralized Financial Grid",
+          headline: `${coinName} Live Price: $${priceUsd} USD`,
+          summary: `${coinName} is currently trading at $${priceUsd} USD (approximately ₹${priceInr} INR) on live global exchanges.`,
+          source: "Binance Live Ticker",
         };
+      }
+    } catch {}
+
+    // 2. CoinGecko Fallback
+    try {
+      const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd,inr&include_24hr_change=true`);
+      if (res.ok) {
+        const data = await res.json();
+        const asset = data[coin];
+        if (asset) {
+          const usd = asset.usd.toLocaleString();
+          const inr = asset.inr.toLocaleString();
+          const change = asset.usd_24h_change ? asset.usd_24h_change.toFixed(2) : "0";
+          const symbol = coin.toUpperCase();
+          return {
+            type: "crypto",
+            headline: `${symbol} Live Price: $${usd} USD (₹${inr} INR)`,
+            summary: `${symbol} is currently trading at $${usd} USD (₹${inr} INR), with a 24-hour change of ${change}%.`,
+            source: "CoinGecko Global Grid",
+          };
+        }
       }
     } catch (e) {
       console.warn("[Crypto Price Error]", e);
