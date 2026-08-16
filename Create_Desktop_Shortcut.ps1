@@ -10,7 +10,7 @@ $Shortcut.WorkingDirectory = $PSScriptRoot
 $Shortcut.Description = "Launch SantoStark J.A.R.V.I.S. Desktop OS"
 $Shortcut.WindowStyle = 1
 
-$IconPath = Join-Path -Path $PSScriptRoot -ChildPath "public\icons\icon.ico"
+$IconPath = Join-Path -Path $PSScriptRoot -ChildPath "public\icon.ico"
 if (Test-Path $IconPath) {
     $Shortcut.IconLocation = "$IconPath, 0"
 }

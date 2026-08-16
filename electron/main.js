@@ -56,6 +56,7 @@ async function createWindow() {
     minWidth: 1024,
     minHeight: 680,
     title: "SANTOSTARK U.L.T.R.O.N. // J.A.R.V.I.S. DESKTOP OS",
+    icon: path.join(__dirname, "../public/icon.ico"),
     backgroundColor: "#000000",
     show: false,
     frame: true,

@@ -10,31 +10,7 @@
     "tauri": "npx @tauri-apps/cli",
     "tauri:dev": "npx @tauri-apps/cli dev",
     "tauri:build": "npx @tauri-apps/cli build",
-    "desktop:app": "electron .",
-    "desktop:build": "electron-builder --win portable nsis"
-  },
-  "build": {
-    "appId": "com.santostark.jarvis",
-    "productName": "SantoStark_JARVIS",
-    "directories": {
-      "output": "dist_standalone_exe"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    }
+    "desktop:app": "electron ."
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.35",
@@ -52,7 +28,6 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.185.0",
     "electron": "^35.0.0",
-    "electron-builder": "^25.1.8",
     "typescript": "^5"
   }
 }
