@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       ? `\n[VERIFIED REAL-TIME DATA - SOURCE: ${liveFact.source}]\n${liveFact.summary}\n`
       : "";
 
-    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark in India."}\n\n[USER COMMUNICATION PROTOCOL]\n- SantoStark may speak in Indian English, Kannada (ಕನ್ನಡ), Hinglish (Hindi-English mix), non-native sentence structure, colloquial phrases, or informal/imperfect grammar.\n- ALWAYS accurately deduce the underlying intent and true meaning of what SantoStark asks, regardless of inverted words, phonetic pronunciation, or regional slang.\n- If SantoStark asks in Kannada, answer in fluent Kannada (or bilingual English/Kannada) as Tony Stark's loyal AI.\n- Answer SantoStark politely, loyally, and articulately (1-3 sentences max).\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}${liveFactContext}\n- Directive: Use the verified real-time data above to answer SantoStark accurately like Siri/Bixby/JARVIS.`;
+    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark in India."}\n\n[FOLAX & STARK SMART ASSISTANT PROTOCOL]\n- SantoStark may speak in Indian English, Kannada (ಕನ್ನಡ), Hinglish (Hindi-English mix), non-native sentence structure, colloquial phrases, or informal/imperfect grammar.\n- ALWAYS accurately deduce the underlying intent and true meaning of what SantoStark asks, regardless of inverted words, phonetic pronunciation, or regional slang.\n- Present structured, informative, and organized answers with clean headers, bullet points, and emojis when appropriate (e.g. for news, comparisons, weather, health, or sports).\n- For news queries: Present categorized highlights (🇮🇳 India-Focused News, 🌍 International News, ✨ Other Highlights) and conclude with a proactive follow-up (\"Would you like a more detailed look at any of these stories, SantoStark?\").\n- If SantoStark asks in Kannada, answer in fluent Kannada (or bilingual English/Kannada) as Tony Stark's loyal AI.\n- Keep answers articulate, helpful, and natural (1-4 concise paragraphs/bullets).\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}${liveFactContext}\n- Directive: Use the verified real-time data above to answer SantoStark accurately like Siri/Folax/Bixby/JARVIS.`;
 
     // 1. GROQ ULTRA-FAST STREAMING (800+ tokens/sec, 100% Free Tier)
     if ((provider === "groq" || (provider === "auto" && groqKey)) && groqKey) {
@@ -126,68 +126,64 @@ export async function POST(req: NextRequest) {
 
     // 4. LIVE ZERO-COST SEARCH AI STREAMING GATEWAY (Real-World Web Grounding with No Key Required)
     try {
-      const liveAiUrl = "https://text.pollinations.ai/openai";
+      const liveAiUrl = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai&system=${encodeURIComponent(enhancedSystemPrompt)}&search=true`;
       const liveAiRes = await fetch(liveAiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: enhancedSystemPrompt },
-            { role: "user", content: prompt },
-          ],
-          model: "openai-large",
-          stream: true,
-          search: true,
-          seed: Math.floor(Math.random() * 100000),
-        }),
+        headers: { "User-Agent": "SantoStark-ULTRON/1.0" },
       });
 
-      if (liveAiRes.ok && liveAiRes.body) {
-        return new Response(createSSEStream(liveAiRes.body, "live-web-ai"), {
-          headers: {
-            "Content-Type": "text/event-stream; charset=utf-8",
-            "Cache-Control": "no-cache, no-transform",
-            Connection: "keep-alive",
-          },
-        });
+      if (liveAiRes.ok) {
+        const fullText = (await liveAiRes.text()).trim();
+        if (fullText && fullText.length > 5 && !fullText.toLowerCase().includes("error")) {
+          const readable = new ReadableStream({
+            async start(controller) {
+              const words = fullText.split(" ");
+              for (const word of words) {
+                const payload = `data: ${JSON.stringify({ token: word + " ", done: false, provider: "live-search-ai" })}\n\n`;
+                controller.enqueue(encoder.encode(payload));
+                await new Promise((r) => setTimeout(r, 15));
+              }
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true, provider: "live-search-ai" })}\n\n`));
+              controller.close();
+            },
+          });
+
+          return new Response(readable, {
+            headers: {
+              "Content-Type": "text/event-stream; charset=utf-8",
+              "Cache-Control": "no-cache, no-transform",
+              Connection: "keep-alive",
+            },
+          });
+        }
       }
     } catch (e) {
       console.warn("[Live AI Gateway Warning]", e);
     }
 
     // 5. LIVE VERIFIED FACTUAL STREAM (Siri / Bixby Precision Fallback)
-    let emergencyAnswer = liveFact
-      ? `SantoStark, ${liveFact.summary}`
-      : `SantoStark, query processed for "${prompt}". All local and telemetry systems online.`;
+    let emergencyAnswer = liveFact ? `SantoStark, ${liveFact.summary}` : "";
 
-    if (!liveFact) {
+    if (!emergencyAnswer) {
       try {
         const cleanTopic = prompt
-          .replace(/^(jarvis|friday|ultron)?\s*(who is|what is|tell me about|what's the|what is the|explain|how does|why is|define)\s+/i, "")
+          .replace(/^(jarvis|friday|ultron)?\s*(who is|what is|tell me about|what's the|what is the|explain|how does|why is|define|batao|kya hai|yaru|enu|bagge)\s+/i, "")
           .replace(/[?.]+$/, "")
           .trim();
 
         if (cleanTopic.length > 1) {
-          // Direct Page Summary
           const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanTopic)}`);
           if (wikiRes.ok) {
             const wikiData = await wikiRes.json();
             if (wikiData.extract) {
               emergencyAnswer = `SantoStark, live intel on ${wikiData.title}: ${wikiData.extract}`;
             }
-          } else {
-            // Wikipedia Full-Text Search fallback
-            const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanTopic)}&format=json&origin=*`);
-            if (searchRes.ok) {
-              const searchData = await searchRes.json();
-              if (searchData.query?.search?.[0]?.snippet) {
-                const cleanSnippet = searchData.query.search[0].snippet.replace(/<[^>]+>/g, "");
-                emergencyAnswer = `SantoStark, analysis for ${searchData.query.search[0].title}: ${cleanSnippet}.`;
-              }
-            }
           }
         }
       } catch {}
+    }
+
+    if (!emergencyAnswer) {
+      emergencyAnswer = `SantoStark, I am analyzing your request regarding "${prompt}". All live sensor grids and neural matrices are active for you.`;
     }
 
     const readable = new ReadableStream({

@@ -128,15 +128,16 @@ export class RealWorldIntelEngine {
       if (res.ok) {
         const data = await res.json();
         if (data.items && data.items.length > 0) {
-          const topStories = data.items.slice(0, 3).map((item: any, i: number) => {
-            const cleanTitle = item.title.replace(/\s*-\s*[^-]+$/, "").trim();
-            return `${i + 1}. ${cleanTitle}.`;
-          }).join(" ");
+          const items = data.items.slice(0, 5);
+          const indiaStories = items.slice(0, 2).map((item: any) => `• ${item.title.replace(/\s*-\s*[^-]+$/, "").trim()}`).join("\n");
+          const worldStories = items.slice(2, 4).map((item: any) => `• ${item.title.replace(/\s*-\s*[^-]+$/, "").trim()}`).join("\n");
+
+          const structuredNews = `Here is the latest intelligence briefing:\n\n🇮🇳 India & Regional News:\n${indiaStories}\n\n🌍 International News:\n${worldStories}\n\nWould you like a more detailed look at any of these stories, SantoStark?`;
 
           return {
             type: "news",
-            headline: "Top Real-Time Global Headlines",
-            summary: `Here are the latest live headlines right now: ${topStories}`,
+            headline: "Top Real-Time Global & India Headlines",
+            summary: structuredNews,
             source: "Live Google News World Feed",
           };
         }

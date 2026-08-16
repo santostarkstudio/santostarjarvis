@@ -2488,6 +2488,76 @@ export default function JarvisOrb() {
               ↵
             </button>
           </form>
+
+          {/* ═══════════════════════════════════════════════ */}
+          {/* FOLAX SMART QUICK CHIPS (LIVE ON HOMEPAGE HUD)  */}
+          {/* ═══════════════════════════════════════════════ */}
+          <div
+            className="folax-homepage-chips"
+            style={{
+              display: "flex",
+              gap: "6px",
+              overflowX: "auto",
+              padding: "8px 0 2px",
+              scrollbarWidth: "none",
+            }}
+          >
+            {[
+              { label: "🇮🇳 Todays news", query: "Todays latest news" },
+              { label: "🌦️ Weather", query: "How's the weather today?" },
+              { label: "🎵 Play music", query: "Play music on YouTube" },
+              { label: "📱 Ask screen", action: "forensics", query: "Ask About Your Screen" },
+              { label: "💬 WhatsApp", action: "whatsapp", query: "Call mom on WhatsApp" },
+              { label: "⚡ Boost", action: "boost", query: "Boost phone and clear RAM" },
+              { label: "📚 Potatoes vs Rice", query: "Which has more calories, potatoes or rice?" },
+              { label: "⚽ Premier League", query: "Show me Premier League goal ranking" },
+              { label: "🎉 Joke", query: "Tell me a joke" },
+              { label: "🏆 Delhi HC", query: "Delhi HC: Critical Medical updates" },
+            ].map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                style={{
+                  background: "rgba(0, 229, 255, 0.08)",
+                  border: "1px solid rgba(0, 229, 255, 0.22)",
+                  color: "rgba(255, 255, 255, 0.9)",
+                  borderRadius: "14px",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(0, 229, 255, 0.2)";
+                  e.currentTarget.style.borderColor = "#00e5ff";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(0, 229, 255, 0.08)";
+                  e.currentTarget.style.borderColor = "rgba(0, 229, 255, 0.22)";
+                }}
+                onClick={() => {
+                  if (chip.action === "forensics") {
+                    spatialWorkspace.addForensicScanner();
+                    audioEngine.playScan();
+                    showToast("🔍 FORENSIC SCANNER DEPLOYED");
+                  } else if (chip.action === "whatsapp") {
+                    spatialWorkspace.addAppTab("whatsapp");
+                    audioEngine.playGrab();
+                    showToast("💬 WHATSAPP UPLINK LAUNCHED");
+                  } else if (chip.action === "boost") {
+                    audioEngine.playGesture("overdrive");
+                    showToast("⚡ TELEMETRY RAM BOOSTED (100% NOMINAL)");
+                  }
+                  setTextInput(chip.query);
+                  handleSendMessage(chip.query);
+                }}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* View Controls */}

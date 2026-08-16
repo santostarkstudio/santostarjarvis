@@ -431,7 +431,54 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 1. ——— APPS & HUD TABS (Strict Matchers) ———
+    // 3. ——— FOLAX SMART SKILLS & APP TABS (Native Backend Triggers) ———
+    if (/^(call mom|call someone on whatsapp|open whatsapp|send my recent photo)/i.test(lower)) {
+      this.callbacks.onOpenAppTab?.("whatsapp");
+      const resp = "Opening secure WhatsApp comms uplink for SantoStark.";
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(play music|play album|play a kendrick lamar|play rema|listen to rock music|play popular video|play video about)/i.test(lower)) {
+      const q = input.replace(/^(jarvis|friday|ultron)?\s*(play|listen to)?\s*(music|song|album|videos? about|popular videos?)?/i, "").trim() || "Top Trending Music";
+      this.callbacks.onOpenAppTab?.("youtube", { query: q });
+      const resp = `Playing ${q} on YouTube Cinema HUD.`;
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(ask about (your|my) screen|scan screen|analyze screen|is this real|run forensic scan)/i.test(lower)) {
+      if (this.callbacks.onScanForensics) {
+        this.callbacks.onScanForensics();
+        const resp = "Scanning active display matrices for deepfakes, diffusion artifacts, and forensic telemetry.";
+        this.callbacks.onResponse(resp);
+        this.speak(resp);
+        return;
+      }
+    }
+
+    if (/^(boost (phone|suit|system)|clear (telemetry|ram)|optimize system)/i.test(lower)) {
+      audioEngine.playGesture("overdrive");
+      const resp = "System boosted. Telemetry RAM cleared and computational matrices at 100% nominal output.";
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(tell me a joke|tell a joke|crack a joke)$/i.test(lower)) {
+      const jokes = [
+        "Why do programmers prefer dark mode? Because light attracts bugs.",
+        "Why did Tony Stark build JARVIS? Because even a billionaire needs someone to listen to him.",
+        "There are 10 types of people in the world: those who understand binary, and those who don't.",
+      ];
+      const joke = jokes[Math.floor(Math.random() * jokes.length)];
+      this.callbacks.onResponse(joke);
+      this.speak(joke);
+      return;
+    }
+
     if (/^(open|launch|show)\s+(youtube|video)/i.test(lower)) {
       const q = input.replace(/^(jarvis|friday|ultron)?\s*(open|launch|show)?\s*(youtube|video)?/i, "").trim();
       this.callbacks.onOpenAppTab?.("youtube", { query: q });

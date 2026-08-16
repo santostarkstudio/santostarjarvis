@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       ? `\n[VERIFIED REAL-TIME DATA - SOURCE: ${liveFact.source}]\n${liveFact.summary}\n`
       : "";
 
-    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark in India."}\n\n[USER COMMUNICATION PROTOCOL]\n- SantoStark may speak in Indian English, Kannada (ಕನ್ನಡ), Hinglish (Hindi-English mix), non-native sentence structure, colloquial phrases, or informal/imperfect grammar.\n- ALWAYS accurately deduce the underlying intent and true meaning of what SantoStark asks, regardless of inverted words, phonetic pronunciation, or regional slang.\n- If SantoStark asks in Kannada, answer in fluent Kannada (or bilingual English/Kannada) as Tony Stark's loyal AI.\n- Answer SantoStark politely, loyally, and articulately (1-3 sentences max).\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}${liveFactContext}\n- Directive: Use the verified real-time data above to answer SantoStark accurately like Siri/Bixby/JARVIS.`;
+    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark in India."}\n\n[FOLAX & STARK SMART ASSISTANT PROTOCOL]\n- SantoStark may speak in Indian English, Kannada (ಕನ್ನಡ), Hinglish (Hindi-English mix), non-native sentence structure, colloquial phrases, or informal/imperfect grammar.\n- ALWAYS accurately deduce the underlying intent and true meaning of what SantoStark asks, regardless of inverted words, phonetic pronunciation, or regional slang.\n- Present structured, informative, and organized answers with clean headers, bullet points, and emojis when appropriate (e.g. for news, comparisons, weather, health, or sports).\n- For news queries: Present categorized highlights (🇮🇳 India-Focused News, 🌍 International News, ✨ Other Highlights) and conclude with a proactive follow-up (\"Would you like a more detailed look at any of these stories, SantoStark?\").\n- If SantoStark asks in Kannada, answer in fluent Kannada (or bilingual English/Kannada) as Tony Stark's loyal AI.\n- Keep answers articulate, helpful, and natural (1-4 concise paragraphs/bullets).\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}${liveFactContext}\n- Directive: Use the verified real-time data above to answer SantoStark accurately like Siri/Folax/Bixby/JARVIS.`;
 
     // 1. Google AI Studio (Gemini 2.0 Flash with Google Search Grounding)
     if ((provider === "gemini" || (provider === "auto" && geminiKey)) && geminiKey) {
@@ -178,25 +178,14 @@ export async function POST(req: Request) {
 
     // 4. LIVE ZERO-COST SEARCH AI (Real-World Web Grounding with No Key Required)
     try {
-      const liveAiUrl = "https://text.pollinations.ai/openai";
+      const liveAiUrl = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai&system=${encodeURIComponent(enhancedSystemPrompt)}&search=true`;
       const liveAiRes = await fetch(liveAiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: enhancedSystemPrompt },
-            { role: "user", content: prompt },
-          ],
-          model: "openai-large",
-          search: true,
-          seed: Math.floor(Math.random() * 100000),
-        }),
+        headers: { "User-Agent": "SantoStark-ULTRON/1.0" },
       });
 
       if (liveAiRes.ok) {
-        const liveAiData = await liveAiRes.json();
-        const text = liveAiData.choices?.[0]?.message?.content?.trim();
-        if (text) {
+        const text = (await liveAiRes.text()).trim();
+        if (text && text.length > 5 && !text.toLowerCase().includes("error")) {
           return NextResponse.json({
             text,
             provider: "live-web-ai",
