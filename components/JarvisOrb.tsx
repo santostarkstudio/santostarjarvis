@@ -2782,6 +2782,7 @@ export default function JarvisOrb() {
                   }}
                 >
                   <option value="en-IN">🇮🇳 Indian English (en-IN) — Native Indian Accent &amp; Hinglish</option>
+                  <option value="kn-IN">🇮🇳 Kannada (kn-IN) — ಕನ್ನಡ Voice Recognition</option>
                   <option value="hi-IN">🇮🇳 Hindi (hi-IN) — हिन्दी Voice Recognition</option>
                   <option value="en-GB">🇬🇧 British English (en-GB) — UK Accent</option>
                   <option value="en-US">🇺🇸 American English (en-US) — US Accent</option>
@@ -2803,6 +2804,20 @@ export default function JarvisOrb() {
                   >
                     <span>🇬🇧 J.A.R.V.I.S. (UK BUTLER)</span>
                     <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#00e5ff" }}>▶ TEST</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cyber-btn ${activePersona === "kannada" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    onClick={() => {
+                      setActivePersona("kannada");
+                      voiceSystemRef.current?.setPersona("kannada");
+                      voiceSystemRef.current?.speak("ನಮಸ್ಕಾರ ಸಾಂತೋಸ್ಟಾರ್ಕ್, ಜಾರ್ವಿಸ್ ಕನ್ನಡ ವಾಯ್ಸ್ ಸಿಸ್ಟಮ್ ಸಂಪೂರ್ಣವಾಗಿ ಸಕ್ರಿಯವಾಗಿದೆ.");
+                    }}
+                  >
+                    <span>🇮🇳 ಕನ್ನಡ AI (KANNADA VOICE)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#ffcc00" }}>▶ TEST</span>
                   </button>
 
                   <button

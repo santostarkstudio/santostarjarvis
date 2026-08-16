@@ -10,6 +10,7 @@ export type AssistantPersona =
   | "jarvis-in"
   | "friday-in"
   | "hindi"
+  | "kannada"
   | "edith"
   | "karen";
 

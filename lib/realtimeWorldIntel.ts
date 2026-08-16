@@ -18,29 +18,29 @@ export class RealWorldIntelEngine {
     const q = query.toLowerCase().trim();
 
     // 1. LIVE WORLD & INDIA NEWS & HEADLINES (High Priority)
-    if (/\b(news|headlines|current events|happening in the world|world news|breaking news|samachar|khabar|kya chal raha hai|aaj ka news|today news)\b/i.test(q)) {
+    if (/\b(news|headlines|current events|happening in the world|world news|breaking news|samachar|khabar|kya chal raha hai|aaj ka news|today news|suddi|samachara|ivathina suddi|ಸುದ್ದಿ|ಸಮಾಚಾರ)\b/i.test(q)) {
       const news = await this.fetchLiveNews();
       if (news) return news;
     }
 
-    // 2. LIVE REAL-TIME WEATHER (High Priority - Global & Indian Cities)
-    if (/\b(weather|temperature|forecast|climate|rain|barish|mausam|humidity|hot|cold|is it raining)\b/i.test(q)) {
-      const cityMatch = query.match(/(?:in|for|at|ka|me|mein)\s+([a-zA-Z\s]+?)(?:\s+today|\s+now|\s+tomorrow|\s+kaisa|\?|$)/i) ||
-                         query.match(/([a-zA-Z\s]+)\s+(?:weather|mausam|ka weather)/i);
-      const city = cityMatch ? cityMatch[1].trim() : "Mumbai";
+    // 2. LIVE REAL-TIME WEATHER (High Priority - Global, Indian & Karnataka Cities)
+    if (/\b(weather|temperature|forecast|climate|rain|barish|mausam|humidity|hot|cold|is it raining|havamana|male|bisi|chali|ಹವಾಮಾನ|ಮಳೆ|ತಾಪಮಾನ)\b/i.test(q)) {
+      const cityMatch = query.match(/(?:in|for|at|ka|me|mein|alli|dalli)\s+([a-zA-Z\s]+?)(?:\s+today|\s+now|\s+tomorrow|\s+kaisa|\s+hegide|\?|$)/i) ||
+                         query.match(/([a-zA-Z\s]+)\s+(?:weather|mausam|ka weather|havamana)/i);
+      const city = cityMatch ? cityMatch[1].trim() : "Bengaluru";
       const weather = await this.fetchLiveWeather(city);
       if (weather) return weather;
     }
 
     // 3. LIVE CRYPTO & FINANCIAL PRICES (High Priority)
-    if (/\b(bitcoin|btc|ethereum|eth|crypto|crypto price|solana|doge|crypto rate|bitcoin price)\b/i.test(q)) {
+    if (/\b(bitcoin|btc|ethereum|eth|crypto|crypto price|solana|doge|crypto rate|bitcoin price|bele|dara|ಬೆಲೆ)\b/i.test(q)) {
       const coin = q.includes("ethereum") || q.includes("eth") ? "ethereum" : (q.includes("solana") ? "solana" : "bitcoin");
       const crypto = await this.fetchCryptoPrice(coin);
       if (crypto) return crypto;
     }
 
     // 4. TIME & DATE (Strict Match Only)
-    if (/^(what('s| is) (the )?(current )?time|what time is it|tell me the time|time check|current time|time kya ho raha|time batao)\b/i.test(q)) {
+    if (/^(what('s| is) (the )?(current )?time|what time is it|tell me the time|time check|current time|time kya ho raha|time batao|samaya enu|time enu|ಸಮಯ ಏನು|ಟೈಮ್ ಏನು)\b/i.test(q)) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -52,7 +52,7 @@ export class RealWorldIntelEngine {
       };
     }
 
-    if (/^(what('s| is) (the )?(current )?date|what day is (it|today)|what is today('s)? date|tell me the date|current date|aaj konsa din|aaj ki date)$/i.test(q) ||
+    if (/^(what('s| is) (the )?(current )?date|what day is (it|today)|what is today('s)? date|tell me the date|current date|aaj konsa din|aaj ki date|ivathu yaava dina|ಇವತ್ತು ಯಾವ ದಿನ)$/i.test(q) ||
         /^today('s)? date$/i.test(q)) {
       const now = new Date();
       const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -65,10 +65,10 @@ export class RealWorldIntelEngine {
     }
 
     // 5. LIVE ENCYCLOPEDIC & WORLD FACTS (WIKIPEDIA GRAPH)
-    if (/\b(who is|what is|tell me about|explain|history of|where is|biography of|define|how does|what are|kon hai|kya hai|ke bare me|ke baare me)\b/i.test(q)) {
+    if (/\b(who is|what is|tell me about|explain|history of|where is|biography of|define|how does|what are|kon hai|kya hai|ke bare me|ke baare me|yaru|enu|bagge heli|ಹೇಳಿ|ಯಾರು|ಏನು|ಬಗ್ಗೆ)\b/i.test(q)) {
       const topic = query
-        .replace(/^(jarvis|friday|ultron)?\s*(who is|what is|tell me about|explain|history of|where is|biography of|define|how does|what are|batao|kya hai|kon hai)\s+/i, "")
-        .replace(/\s*(ke bare me|ke baare me|batao|kya hai|kon hai)\s*$/i, "")
+        .replace(/^(jarvis|friday|ultron)?\s*(who is|what is|tell me about|explain|history of|where is|biography of|define|how does|what are|batao|kya hai|kon hai|yaru|enu|bagge heli|bagge)\s+/i, "")
+        .replace(/\s*(ke bare me|ke baare me|batao|kya hai|kon hai|bagge heli|bagge|heli)\s*$/i, "")
         .replace(/[?.]+$/, "")
         .trim();
       if (topic.length > 1) {

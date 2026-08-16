@@ -185,6 +185,11 @@ export async function GET(req: NextRequest) {
       pitch = "+0Hz";
       rate = "+2%";
       break;
+    case "kannada":
+      voice = "kn-IN-GaganNeural"; // Native Kannada (ಕನ್ನಡ) Neural Assistant
+      pitch = "+0Hz";
+      rate = "+2%";
+      break;
     case "edith":
       voice = "en-US-ChristopherNeural"; // E.D.I.T.H. Tactical AI
       pitch = "+2Hz";
