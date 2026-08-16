@@ -21,6 +21,7 @@ import { handBiometrics } from "@/lib/handBiometrics";
 import { BiometricSecurityModal } from "@/components/BiometricSecurityModal";
 import { supabaseVault } from "@/lib/supabaseVault";
 import { starkVisionScanner } from "@/lib/visionScanner";
+import { starkMusicRecognizer } from "@/lib/musicRecognizer";
 
 type CameraState = "off" | "starting" | "on" | "error";
 
@@ -532,6 +533,20 @@ export default function JarvisOrb() {
         );
         setAiResponse(result.text);
         voiceSystemRef.current?.speak(result.text);
+      },
+      // ——— STARK ACOUSTIC MUSIC RECOGNITION ———
+      onRecognizeMusic: async (queryPrompt?: string) => {
+        showToast("🎵 ANALYZING ACOUSTIC SONG & ARTIST...");
+        audioEngine.playScan();
+        setAiResponse("Listening to audio wave frequencies and querying internet music databases...");
+        const result = await starkMusicRecognizer.recognizeMusic(queryPrompt);
+        setAiResponse(result.message);
+        voiceSystemRef.current?.speak(result.message);
+
+        if (result.song) {
+          spatialWorkspace.addAppTab("youtube", { query: result.song.youtubeQuery });
+          showToast(`🎬 DEPLOYED // ${result.song.title} on HUD`);
+        }
       },
     });
 
@@ -2529,6 +2544,7 @@ export default function JarvisOrb() {
             }}
           >
             {[
+              { label: "🎵 Identify Song", action: "music_recognize", query: "What song is this and who is the singer?" },
               { label: "📷 Scan Camera Object", action: "camera_scan", query: "Analyze what object is shown to the camera, its uses, and why it was made." },
               { label: "🖥️ Read Screen", action: "screen_scan", query: "Read and analyze what is on my screen right now." },
               { label: "🇮🇳 Todays news", query: "Todays latest news" },
@@ -2546,10 +2562,10 @@ export default function JarvisOrb() {
                 key={idx}
                 type="button"
                 style={{
-                  background: chip.action === "camera_scan" || chip.action === "screen_scan"
+                  background: chip.action === "camera_scan" || chip.action === "screen_scan" || chip.action === "music_recognize"
                     ? "rgba(0, 229, 255, 0.18)"
                     : "rgba(0, 229, 255, 0.08)",
-                  border: chip.action === "camera_scan" || chip.action === "screen_scan"
+                  border: chip.action === "camera_scan" || chip.action === "screen_scan" || chip.action === "music_recognize"
                     ? "1px solid #00e5ff"
                     : "1px solid rgba(0, 229, 255, 0.22)",
                   color: "#ffffff",
@@ -2560,22 +2576,35 @@ export default function JarvisOrb() {
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                   flexShrink: 0,
-                  fontWeight: chip.action === "camera_scan" || chip.action === "screen_scan" ? "700" : "400",
+                  fontWeight: chip.action === "camera_scan" || chip.action === "screen_scan" || chip.action === "music_recognize" ? "700" : "400",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = "rgba(0, 229, 255, 0.25)";
                   e.currentTarget.style.borderColor = "#00e5ff";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = chip.action === "camera_scan" || chip.action === "screen_scan"
+                  e.currentTarget.style.background = chip.action === "camera_scan" || chip.action === "screen_scan" || chip.action === "music_recognize"
                     ? "rgba(0, 229, 255, 0.18)"
                     : "rgba(0, 229, 255, 0.08)";
-                  e.currentTarget.style.borderColor = chip.action === "camera_scan" || chip.action === "screen_scan"
+                  e.currentTarget.style.borderColor = chip.action === "camera_scan" || chip.action === "screen_scan" || chip.action === "music_recognize"
                     ? "#00e5ff"
                     : "rgba(0, 229, 255, 0.22)";
                 }}
                 onClick={async () => {
-                  if (chip.action === "camera_scan") {
+                  if (chip.action === "music_recognize") {
+                    showToast("🎵 ANALYZING ACOUSTIC SONG & ARTIST...");
+                    audioEngine.playScan();
+                    setAiResponse("Listening to audio wave frequencies and querying internet music databases...");
+                    const result = await starkMusicRecognizer.recognizeMusic(chip.query);
+                    setAiResponse(result.message);
+                    voiceSystemRef.current?.speak(result.message);
+
+                    if (result.song) {
+                      spatialWorkspace.addAppTab("youtube", { query: result.song.youtubeQuery });
+                      showToast(`🎬 DEPLOYED // ${result.song.title} on HUD`);
+                    }
+                    return;
+                  } else if (chip.action === "camera_scan") {
                     showToast("📷 ANALYZING OBJECT IN CAMERA...");
                     audioEngine.playScan();
                     setAiResponse("Analyzing object in camera feed... Identifying item, practical uses, and technical purpose for SantoStark.");

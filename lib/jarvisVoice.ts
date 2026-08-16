@@ -44,6 +44,7 @@ export interface VoiceCommandCallbacks {
   onOpenSatelliteDisplay?(): void;
   onAnalyzeCameraObject?(prompt?: string): void;
   onAnalyzeScreen?(prompt?: string): void;
+  onRecognizeMusic?(query?: string): void;
 }
 
 interface IWindow extends Window {
@@ -417,7 +418,21 @@ export class JarvisVoiceSystem {
       }
     }
 
-    // 4. ——— STARK FORENSIC SCANNER (Strict Commands) ———
+    // 4. ——— STARK ACOUSTIC MUSIC RECOGNITION (Identify Song) ———
+    const isMusicRecognitionQuery =
+      /^(hey )?(jarvis|friday|ultron)?\s*(what('s| is) (this|the) (song|music|track)|identify (this )?(music|song|track)|name of this song|what song is (this|playing)|who sings this( song)?|recognize (this )?(song|music)|find this (song|music|track)|tell me (the )?song name)/i.test(
+        lower
+      ) ||
+      /\b(what song is this|name of this song|who sings this|identify this song|recognize music|song name)\b/i.test(lower);
+
+    if (isMusicRecognitionQuery) {
+      if (this.callbacks.onRecognizeMusic) {
+        this.callbacks.onRecognizeMusic(trimmed);
+        return;
+      }
+    }
+
+    // 5. ——— STARK FORENSIC SCANNER (Strict Commands) ———
     if (
       /^(scan this|is this ai|is this real|scan photo|scan video|verify news|is this fake|deepfake scan|run forensic scan)$/i.test(lower)
     ) {
