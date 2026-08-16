@@ -22,6 +22,7 @@ import { BiometricSecurityModal } from "@/components/BiometricSecurityModal";
 import { supabaseVault } from "@/lib/supabaseVault";
 import { starkVisionScanner } from "@/lib/visionScanner";
 import { starkMusicRecognizer } from "@/lib/musicRecognizer";
+import { UltraEarthGlobe } from "@/components/UltraEarthGlobe";
 
 type CameraState = "off" | "starting" | "on" | "error";
 
@@ -1760,14 +1761,12 @@ export default function JarvisOrb() {
                     />
                   </div>
                 ) : card.category === "maps" ? (
-                  // 2. GOOGLE MAPS APP TAB
-                  <div className="holo-app-container maps-player">
-                    <iframe
-                      src={`https://maps.google.com/maps?q=${encodeURIComponent(
-                        card.searchQuery || "Manhattan, New York",
-                      )}&t=k&z=13&ie=UTF8&iwloc=&output=embed`}
-                      className="holo-iframe"
-                      title={card.title}
+                  // 2. GOOGLE EARTH 4K ORBITAL GLOBE TAB
+                  <div className="holo-app-container maps-player" style={{ height: "100%", width: "100%" }}>
+                    <UltraEarthGlobe
+                      cardId={card.id}
+                      themeColor={THEMES[activeTheme].primaryHex}
+                      isMaximized={maximizedCardId === card.id}
                     />
                   </div>
                 ) : card.category === "spotify" ? (
@@ -1922,25 +1921,15 @@ export default function JarvisOrb() {
                     <path d="M 85 45 L 95 48 L 88 52 Z" fill="var(--theme-primary)" />
                     <path d="M 115 45 L 105 48 L 112 52 Z" fill="var(--theme-primary)" />
                   </svg>
-                ) : card.svgType === "arc" ? (
-                  // Arc Reactor Vector Diagram
-                  <svg viewBox="0 0 200 120" className="holo-cad-svg">
-                    <circle cx="100" cy="60" r="42" fill="none" stroke="var(--theme-primary)" strokeWidth="1.5" />
-                    <circle cx="100" cy="60" r="30" fill="none" stroke="var(--theme-secondary)" strokeWidth="1" strokeDasharray="4 2" />
-                    <circle cx="100" cy="60" r="14" fill="none" stroke="var(--theme-primary)" strokeWidth="2" />
-                    {[0, 36, 72, 108, 144, 180, 216, 252, 288, 324].map((deg, i) => (
-                      <rect
-                        key={i}
-                        x="96"
-                        y="22"
-                        width="8"
-                        height="10"
-                        fill="var(--theme-primary)"
-                        opacity="0.8"
-                        transform={`rotate(${deg} 100 60)`}
-                      />
-                    ))}
-                  </svg>
+                ) : card.svgType === "arc" || card.category === "reactor" ? (
+                  // Live 4K Ultra Reality Rotating Earth with GPS Lock
+                  <div style={{ width: "100%", height: "100%", minHeight: "160px" }}>
+                    <UltraEarthGlobe
+                      cardId={card.id}
+                      themeColor={THEMES[activeTheme].primaryHex}
+                      isMaximized={maximizedCardId === card.id}
+                    />
+                  </div>
                 ) : card.svgType === "satellite" ? (
                   // Orbital Satellite Map
                   <svg viewBox="0 0 200 120" className="holo-cad-svg">
