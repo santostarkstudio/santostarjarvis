@@ -5,7 +5,11 @@ export async function POST(req: Request) {
   try {
     const { prompt, systemPrompt, provider, keys } = await req.json();
 
-    const geminiKey = keys?.geminiKey || process.env.GEMINI_API_KEY;
+    const geminiKey =
+      keys?.geminiKey ||
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+      process.env.GEMINI_API_KEY ||
+      process.env.NEXT_PUBLIC_GEMINI_API_KEY;
     const openaiKey = keys?.openaiKey || process.env.OPENAI_API_KEY;
     const claudeKey = keys?.claudeKey || process.env.ANTHROPIC_API_KEY;
 
