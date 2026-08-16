@@ -42,6 +42,8 @@ export interface VoiceCommandCallbacks {
   onRestoreWorkspace?(): void;
   onProjectToSatellite?(target?: string): void;
   onOpenSatelliteDisplay?(): void;
+  onAnalyzeCameraObject?(prompt?: string): void;
+  onAnalyzeScreen?(prompt?: string): void;
 }
 
 interface IWindow extends Window {
@@ -358,8 +360,8 @@ export class JarvisVoiceSystem {
     this.callbacks.onTranscript(trimmed);
     const lower = trimmed.toLowerCase();
 
-    // 1. ——— REAL-TIME DATE & TIME QUERIES (Strict Match Only) ———
-    if (/^(what('s| is) (the )?(current )?date|what day is (it|today)|what is today('s)? date|tell me the date|current date)$/i.test(lower)) {
+    // 1. ——— REAL-TIME DATE & TIME QUERIES (Natural Speech) ———
+    if (/^(hey )?(jarvis|friday|ultron)?\s*(what('s| is) (the )?(current )?date|what day is (it|today)|what is today('s)? date|tell me the date|current date)$/i.test(lower)) {
       const now = new Date();
       const options: Intl.DateTimeFormatOptions = {
         weekday: "long",
@@ -374,7 +376,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (/^(what('s| is) (the )?(current )?time|what time is it|tell me the time|current time)$/i.test(lower)) {
+    if (/^(hey )?(jarvis|friday|ultron)?\s*(what('s| is) (the )?(current )?time|what time is it|tell me the time|current time)$/i.test(lower)) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -387,7 +389,35 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 2. ——— STARK FORENSIC SCANNER (Strict Commands) ———
+    // 2. ——— STARK OPTICAL CAMERA OBJECT VISION (Show to Camera - With or Without Wake Word) ———
+    const isCameraVisionQuery =
+      /^(hey )?(jarvis|friday|ultron)?\s*(what('s| is) (this|that|it)|what('s| is) in my hand|how (it|does this|does it) work(s)?|what are (its|the) uses( for it)?|what is it and what uses for it|analyze this( object| item)?|what am i showing( you)?|scan (this|the) (object|item)|what is this in (my hand|front of camera)|tell me what this is|identify this( object| item)?|what is this thing|what am i holding|look at this|check this object)/i.test(
+        lower
+      ) ||
+      /\b(in my hand|front of (the )?camera|showing to (the )?camera|look at this object|scan this item|what('s| is) in my hand|what am i holding)\b/i.test(lower);
+
+    if (isCameraVisionQuery) {
+      if (this.callbacks.onAnalyzeCameraObject) {
+        this.callbacks.onAnalyzeCameraObject(trimmed);
+        return;
+      }
+    }
+
+    // 3. ——— STARK VISUAL SCREEN READER (Read Active Screen - With or Without Wake Word) ———
+    const isScreenVisionQuery =
+      /^(hey )?(jarvis|friday|ultron)?\s*(read (my |the )?screen|analyze (my |the )?screen|what('s| is) on my screen|read what('s| is) on (my )?screen|what is this on my screen|explain (my )?screen|what is displayed on screen|tell me what's on screen)/i.test(
+        lower
+      ) ||
+      /\b(on my screen|on the screen|read screen|analyze screen)\b/i.test(lower);
+
+    if (isScreenVisionQuery) {
+      if (this.callbacks.onAnalyzeScreen) {
+        this.callbacks.onAnalyzeScreen(trimmed);
+        return;
+      }
+    }
+
+    // 4. ——— STARK FORENSIC SCANNER (Strict Commands) ———
     if (
       /^(scan this|is this ai|is this real|scan photo|scan video|verify news|is this fake|deepfake scan|run forensic scan)$/i.test(lower)
     ) {

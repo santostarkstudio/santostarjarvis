@@ -20,6 +20,7 @@ import { clapDetector } from "@/lib/clapDetector";
 import { handBiometrics } from "@/lib/handBiometrics";
 import { BiometricSecurityModal } from "@/components/BiometricSecurityModal";
 import { supabaseVault } from "@/lib/supabaseVault";
+import { starkVisionScanner } from "@/lib/visionScanner";
 
 type CameraState = "off" | "starting" | "on" | "error";
 
@@ -506,6 +507,31 @@ export default function JarvisOrb() {
         multiDisplaySync.openSatelliteWindow();
         audioEngine.playBoot();
         showToast("🖥️ LAUNCHED SATELLITE ON MONITOR 2");
+      },
+      // ——— STARK OPTICAL CAMERA OBJECT VISION ———
+      onAnalyzeCameraObject: async (queryPrompt?: string) => {
+        showToast("📷 ANALYZING OBJECT IN CAMERA...");
+        audioEngine.playScan();
+        setAiResponse("Analyzing object in camera feed... Identifying item, practical uses, and technical purpose for SantoStark.");
+        const result = await starkVisionScanner.analyzeCameraObject(
+          videoRef.current,
+          queryPrompt,
+          voiceSystemRef.current?.persona || "jarvis"
+        );
+        setAiResponse(result.text);
+        voiceSystemRef.current?.speak(result.text);
+      },
+      // ——— STARK VISUAL SCREEN READER ———
+      onAnalyzeScreen: async (queryPrompt?: string) => {
+        showToast("🖥️ READING ACTIVE SCREEN...");
+        audioEngine.playScan();
+        setAiResponse("Scanning screen contents, reading visible data, and compiling visual telemetry report...");
+        const result = await starkVisionScanner.analyzeScreen(
+          queryPrompt,
+          voiceSystemRef.current?.persona || "jarvis"
+        );
+        setAiResponse(result.text);
+        voiceSystemRef.current?.speak(result.text);
       },
     });
 
@@ -2503,6 +2529,8 @@ export default function JarvisOrb() {
             }}
           >
             {[
+              { label: "📷 Scan Camera Object", action: "camera_scan", query: "Analyze what object is shown to the camera, its uses, and why it was made." },
+              { label: "🖥️ Read Screen", action: "screen_scan", query: "Read and analyze what is on my screen right now." },
               { label: "🇮🇳 Todays news", query: "Todays latest news" },
               { label: "🌦️ Weather", query: "How's the weather today?" },
               { label: "🎵 Play music", query: "Play music on YouTube" },
@@ -2518,9 +2546,13 @@ export default function JarvisOrb() {
                 key={idx}
                 type="button"
                 style={{
-                  background: "rgba(0, 229, 255, 0.08)",
-                  border: "1px solid rgba(0, 229, 255, 0.22)",
-                  color: "rgba(255, 255, 255, 0.9)",
+                  background: chip.action === "camera_scan" || chip.action === "screen_scan"
+                    ? "rgba(0, 229, 255, 0.18)"
+                    : "rgba(0, 229, 255, 0.08)",
+                  border: chip.action === "camera_scan" || chip.action === "screen_scan"
+                    ? "1px solid #00e5ff"
+                    : "1px solid rgba(0, 229, 255, 0.22)",
+                  color: "#ffffff",
                   borderRadius: "14px",
                   padding: "4px 10px",
                   fontSize: "11px",
@@ -2528,17 +2560,45 @@ export default function JarvisOrb() {
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                   flexShrink: 0,
+                  fontWeight: chip.action === "camera_scan" || chip.action === "screen_scan" ? "700" : "400",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(0, 229, 255, 0.2)";
+                  e.currentTarget.style.background = "rgba(0, 229, 255, 0.25)";
                   e.currentTarget.style.borderColor = "#00e5ff";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(0, 229, 255, 0.08)";
-                  e.currentTarget.style.borderColor = "rgba(0, 229, 255, 0.22)";
+                  e.currentTarget.style.background = chip.action === "camera_scan" || chip.action === "screen_scan"
+                    ? "rgba(0, 229, 255, 0.18)"
+                    : "rgba(0, 229, 255, 0.08)";
+                  e.currentTarget.style.borderColor = chip.action === "camera_scan" || chip.action === "screen_scan"
+                    ? "#00e5ff"
+                    : "rgba(0, 229, 255, 0.22)";
                 }}
-                onClick={() => {
-                  if (chip.action === "forensics") {
+                onClick={async () => {
+                  if (chip.action === "camera_scan") {
+                    showToast("📷 ANALYZING OBJECT IN CAMERA...");
+                    audioEngine.playScan();
+                    setAiResponse("Analyzing object in camera feed... Identifying item, practical uses, and technical purpose for SantoStark.");
+                    const result = await starkVisionScanner.analyzeCameraObject(
+                      videoRef.current,
+                      chip.query,
+                      voiceSystemRef.current?.persona || "jarvis"
+                    );
+                    setAiResponse(result.text);
+                    voiceSystemRef.current?.speak(result.text);
+                    return;
+                  } else if (chip.action === "screen_scan") {
+                    showToast("🖥️ READING ACTIVE SCREEN...");
+                    audioEngine.playScan();
+                    setAiResponse("Scanning screen contents, reading visible data, and compiling visual telemetry report...");
+                    const result = await starkVisionScanner.analyzeScreen(
+                      chip.query,
+                      voiceSystemRef.current?.persona || "jarvis"
+                    );
+                    setAiResponse(result.text);
+                    voiceSystemRef.current?.speak(result.text);
+                    return;
+                  } else if (chip.action === "forensics") {
                     spatialWorkspace.addForensicScanner();
                     audioEngine.playScan();
                     showToast("🔍 FORENSIC SCANNER DEPLOYED");
