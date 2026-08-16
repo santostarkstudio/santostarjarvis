@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       ? `\n[VERIFIED REAL-TIME DATA - SOURCE: ${liveFact.source}]\n${liveFact.summary}\n`
       : "";
 
-    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark."}\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}${liveFactContext}\n- Directive: Use the verified real-time data above to answer SantoStark accurately and concisely like Siri/Bixby/JARVIS.`;
+    const enhancedSystemPrompt = `${systemPrompt || "You are JARVIS, Tony Stark's hyper-intelligent AI assistant serving SantoStark in India."}\n\n[USER COMMUNICATION PROTOCOL]\n- SantoStark may speak in Indian English, Hinglish (Hindi-English mix), non-native sentence structure, colloquial phrases, or informal/imperfect grammar.\n- ALWAYS accurately deduce the underlying intent and true meaning of what SantoStark asks, regardless of inverted words, phonetic pronunciation, or slang.\n- Answer SantoStark politely, loyally, and articulately in fluent English as his loyal AI assistant (1-3 sentences max).\n\n[REAL-TIME GRID CONTEXT]\n- Live Global Clock: ${liveTimeStr}${liveFactContext}\n- Directive: Use the verified real-time data above to answer SantoStark accurately like Siri/Bixby/JARVIS.`;
 
     // 1. GROQ ULTRA-FAST STREAMING (800+ tokens/sec, 100% Free Tier)
     if ((provider === "groq" || (provider === "auto" && groqKey)) && groqKey) {

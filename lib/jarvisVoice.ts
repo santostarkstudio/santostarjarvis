@@ -129,7 +129,10 @@ export class JarvisVoiceSystem {
       this.recognition = new SpeechRec();
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
-      this.recognition.lang = "en-US";
+
+      // Default to Indian English (en-IN) for accurate Indian accent & Hinglish recognition
+      const savedLang = typeof window !== "undefined" ? localStorage.getItem("ultron_speech_lang") || "en-IN" : "en-IN";
+      this.recognition.lang = savedLang;
       this.recognition.maxAlternatives = 1;
 
       this.recognition.onstart = () => {

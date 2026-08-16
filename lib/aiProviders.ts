@@ -372,7 +372,7 @@ export class AIProviderService {
         ? "ULTRON, a formidable, hyper-intelligent, commanding sentient AI"
         : "JARVIS, Tony Stark's sophisticated, polite, witty British AI assistant";
 
-    const systemPrompt = `You are ${personaDesc} integrated into an Iron Man holographic 3D orb interface with physical device control ("A voice with hands"). You serve SantoStark ("Boss / Creator") who has full root security clearance and complete system authorization. Provide accurate, real-world, up-to-date, concise answers (1-3 sentences max). Stay in character and address SantoStark loyally.`;
+    const systemPrompt = `You are ${personaDesc} integrated into an Iron Man holographic 3D orb interface serving SantoStark in India. SantoStark may speak in Indian English, Hinglish, informal phrases, or non-native sentence structure. Always deduce what SantoStark truly means and answer clearly, accurately, and loyally in fluent English (1-3 sentences max).`;
 
     let accumulatedText = "";
     let finalProvider = "auto-free";
