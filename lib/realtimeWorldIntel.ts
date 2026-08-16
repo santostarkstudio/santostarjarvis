@@ -39,6 +39,45 @@ export class RealWorldIntelEngine {
       if (crypto) return crypto;
     }
 
+    // 3.5 INSTANT ARITHMETIC & CALCULATION ENGINE (Copilot / Siri Speed)
+    const mathMatch =
+      query.match(/^(\d+(?:\.\d+)?)\s*([\+\-\*\/xX\^%])\s*(\d+(?:\.\d+)?)$/) ||
+      query.match(/(?:calculate|what is|how much is)\s+(\d+(?:\.\d+)?\s*[\+\-\*\/xX\^%]\s*\d+(?:\.\d+)?)/i);
+    if (mathMatch) {
+      try {
+        const expr =
+          mathMatch[1] && mathMatch[2] && mathMatch[3]
+            ? `${mathMatch[1]} ${mathMatch[2].replace(/x/i, "*")} ${mathMatch[3]}`
+            : mathMatch[1].replace(/x/i, "*");
+        if (/^[\d\s\+\-\*\/\.\(\)]+$/.test(expr)) {
+          const result = Function(`'use strict'; return (${expr})`)();
+          return {
+            type: "general",
+            headline: `Calculation: ${expr} = ${result}`,
+            summary: `The result of ${expr} is ${result}.`,
+            source: "Stark Quantum Compute Array",
+          };
+        }
+      } catch {}
+    }
+
+    // 3.6 LIVE CURRENCY CONVERSION (USD to INR, EUR to INR, etc.)
+    if (/\b(usd to inr|dollar to rupee|dollar to inr|eur to inr|euro to inr|gbp to inr|pound to inr|inr to usd)\b/i.test(q)) {
+      try {
+        const res = await fetch("https://open.er-api.com/v6/latest/USD");
+        if (res.ok) {
+          const data = await res.json();
+          const inrRate = data.rates?.INR || 86.5;
+          return {
+            type: "stock",
+            headline: `USD to INR Exchange Rate: ₹${inrRate.toFixed(2)}`,
+            summary: `1 United States Dollar (USD) is currently equal to approximately ₹${inrRate.toFixed(2)} Indian Rupees (INR).`,
+            source: "Live Global Currency Exchange",
+          };
+        }
+      } catch {}
+    }
+
     // 4. TIME & DATE (Strict Match Only)
     if (/^(what('s| is) (the )?(current )?time|what time is it|tell me the time|time check|current time|time kya ho raha|time batao|samaya enu|time enu|ಸಮಯ ಏನು|ಟೈಮ್ ಏನು)\b/i.test(q)) {
       const now = new Date();

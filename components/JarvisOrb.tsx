@@ -255,6 +255,58 @@ export default function JarvisOrb() {
     };
   }, []);
 
+  // AI Connection Heartbeat & Latency Monitor
+  const [aiHeartbeat, setAiHeartbeat] = useState<{
+    status: "optimal" | "auxiliary" | "checking";
+    latencyMs: number;
+    provider: string;
+  }>({
+    status: "checking",
+    latencyMs: 0,
+    provider: "Gemini 2.0",
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    const testHeartbeat = async () => {
+      const t0 = performance.now();
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: "ping", provider: activeProvider }),
+        });
+        const latency = Math.round(performance.now() - t0);
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          setAiHeartbeat({
+            status: "optimal",
+            latencyMs: latency,
+            provider: data.provider || "Gemini 2.0",
+          });
+          console.log(
+            `%c[STARK AI MESH LINKED]%c Provider: ${data.provider || "Gemini 2.0"} | Latency: ${latency}ms | Status: NOMINAL`,
+            "background:#00e5ff; color:#000; font-weight:bold; padding:2px 6px; border-radius:3px;",
+            "color:#00ff88; font-weight:bold;"
+          );
+        } else if (isMounted) {
+          setAiHeartbeat({ status: "auxiliary", latencyMs: latency, provider: "Auxiliary Failover" });
+        }
+      } catch {
+        if (isMounted) {
+          setAiHeartbeat({ status: "auxiliary", latencyMs: 0, provider: "Local Mesh" });
+        }
+      }
+    };
+
+    void testHeartbeat();
+    const interval = setInterval(testHeartbeat, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeProvider]);
+
   // ——— FORENSIC SCAN EXECUTION ———
   const handleScanCard = useCallback(
     async (card: SpatialCard) => {
@@ -2144,6 +2196,35 @@ export default function JarvisOrb() {
 
         {/* Telemetry Strip */}
         <div className="hud-telemetry-strip">
+          <div
+            className="hud-badge"
+            style={{
+              borderColor:
+                aiHeartbeat.status === "optimal"
+                  ? "rgba(0, 255, 136, 0.5)"
+                  : "rgba(255, 170, 0, 0.5)",
+            }}
+            title={`AI Core Mesh: ${aiHeartbeat.provider} | Latency: ${aiHeartbeat.latencyMs}ms`}
+          >
+            <span className="badge-label">AI LINK</span>
+            <span
+              className="badge-val"
+              style={{
+                color:
+                  aiHeartbeat.status === "optimal"
+                    ? "#00ff88"
+                    : aiHeartbeat.status === "checking"
+                    ? "#00e5ff"
+                    : "#ffaa00",
+              }}
+            >
+              {aiHeartbeat.status === "optimal"
+                ? `🟢 ${aiHeartbeat.latencyMs}ms`
+                : aiHeartbeat.status === "checking"
+                ? "🟡 PING..."
+                : "🟠 AUX"}
+            </span>
+          </div>
           <div className="hud-badge">
             <span className="badge-label">OUTPUT</span>
             <span className="badge-val">{telemetry.coreOutput}%</span>
