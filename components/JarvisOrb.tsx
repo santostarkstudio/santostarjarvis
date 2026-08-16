@@ -94,7 +94,6 @@ export default function JarvisOrb() {
   const [lockScreenPin, setLockScreenPin] = useState("");
   const [lockScreenError, setLockScreenError] = useState("");
   const [speechLang, setSpeechLang] = useState("en-IN");
-  const [activePersona, setActivePersona] = useState<string>("jarvis");
 
   useEffect(() => {
     if (showSettings) {
