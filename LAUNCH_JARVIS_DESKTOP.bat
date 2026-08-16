@@ -6,25 +6,32 @@ cls
 echo ==============================================================================
 echo    SANTOSTARK U.L.T.R.O.N. // J.A.R.V.I.S. NATIVE DESKTOP SUITE
 echo ==============================================================================
-echo    [1] Launch Native Desktop App (Tauri 60FPS Engine)
-echo    [2] Build Windows Standalone Installer (.MSI / .EXE)
-echo    [3] Launch Dedicated Frameless Desktop App Window (Chrome / Edge Engine)
-echo    [4] Exit
+echo    [1] Launch Native Desktop App (60-120 FPS Engine)
+echo    [2] Build SINGLE Standalone Portable .EXE (Copy to other PCs / USB)
+echo    [3] Build Native Windows Installer (.MSI / .EXE)
+echo    [4] Launch Dedicated Frameless Window (Chrome / Edge Engine)
+echo    [5] Exit
 echo ==============================================================================
 echo.
 
-set /p choice="Enter your choice (1, 2, or 3): "
+set /p choice="Enter your choice (1, 2, 3, 4, or 5): "
 
 if "%choice%"=="1" goto LAUNCH_TAURI
-if "%choice%"=="2" goto BUILD_INSTALLER
-if "%choice%"=="3" goto LAUNCH_FRAMELESS
-if "%choice%"=="4" goto EOF
+if "%choice%"=="2" goto BUILD_PORTABLE_EXE
+if "%choice%"=="3" goto BUILD_INSTALLER
+if "%choice%"=="4" goto LAUNCH_FRAMELESS
+if "%choice%"=="5" goto EOF
 
 :LAUNCH_TAURI
 echo.
 echo [*] Launching Native J.A.R.V.I.S. Desktop OS Window...
 taskkill /IM node.exe /F >nul 2>&1
 npm run tauri:dev
+goto EOF
+
+:BUILD_PORTABLE_EXE
+echo.
+call BUILD_SINGLE_PORTABLE_EXE.bat
 goto EOF
 
 :BUILD_INSTALLER
