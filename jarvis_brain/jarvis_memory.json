@@ -1,0 +1,13 @@
+{
+  "owner": "SantoStark",
+  "clearance_level": 10,
+  "notes": [],
+  "reminders": [],
+  "schedules": [],
+  "user_preferences": {
+    "preferred_persona": "jarvis",
+    "voice_speed_wpm": 180,
+    "search_region": "in-en"
+  },
+  "key_value_store": {}
+}

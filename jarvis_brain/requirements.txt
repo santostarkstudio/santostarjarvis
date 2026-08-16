@@ -1,0 +1,29 @@
+# Core Google GenAI SDK
+google-genai>=0.1.1
+google-generativeai>=0.8.3
+
+# Local LLM Fallback (Ollama)
+ollama>=0.4.7
+
+# Live Web Search (Keyless)
+duckduckgo-search>=7.3.0
+
+# Speech Recognition & Audio Input
+SpeechRecognition>=3.14.1
+PyAudio>=0.2.14
+
+# Text-to-Speech (Offline & Zero Latency)
+pyttsx3>=2.98
+
+# OS Automation & Desktop Control
+pyautogui>=0.9.54
+Pillow>=10.4.0
+
+# Environment & Utilities
+python-dotenv>=1.0.1
+requests>=2.32.3
+
+# Optional FastAPI / WebSocket Bridge for Next.js ULTRON UI
+fastapi>=0.115.0
+uvicorn>=0.30.0
+websockets>=13.0
