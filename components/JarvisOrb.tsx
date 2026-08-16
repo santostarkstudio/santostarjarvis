@@ -93,6 +93,8 @@ export default function JarvisOrb() {
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [lockScreenPin, setLockScreenPin] = useState("");
   const [lockScreenError, setLockScreenError] = useState("");
+  const [speechLang, setSpeechLang] = useState("en-IN");
+  const [activePersona, setActivePersona] = useState<string>("jarvis");
 
   useEffect(() => {
     if (showSettings) {
@@ -105,6 +107,11 @@ export default function JarvisOrb() {
       setSupabaseUrlInput(config.supabaseUrl);
       setSupabaseKeyInput(config.supabaseAnonKey);
       setIsSupabaseConnected(supabaseVault.getConnectionStatus());
+
+      if (voiceSystemRef.current) {
+        setSpeechLang(voiceSystemRef.current.getSpeechLanguage());
+        setActivePersona(voiceSystemRef.current.persona);
+      }
     }
   }, [showSettings]);
 
@@ -2760,50 +2767,141 @@ export default function JarvisOrb() {
               </div>
 
               {/* ═══════════════════════════════════════════════ */}
-              {/* AUTHENTIC NEURAL MOVIE VOICE SYNTHESIS SECTION */}
+              {/* SPEECH RECOGNITION & NEURAL VOICES SECTION */}
               {/* ═══════════════════════════════════════════════ */}
               <div className="modal-section" style={{ background: "rgba(0, 229, 255, 0.06)", border: "1px solid rgba(0, 229, 255, 0.35)", borderRadius: "8px", padding: "12px", marginBottom: "8px" }}>
                 <h4 style={{ color: "#00e5ff", marginBottom: "8px", fontSize: "10px", letterSpacing: "0.1em" }}>
-                  🔊 AUTHENTIC MOVIE VOICE SYNTHESIS (100% FREE):
+                  🎙️ SPEECH RECOGNITION INPUT LANGUAGE (ACCENT & HINGLISH):
                 </h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <select
+                  className="cyber-input modal-field"
+                  style={{ width: "100%", padding: "8px", background: "rgba(0, 20, 40, 0.9)", color: "#00e5ff", border: "1px solid rgba(0, 229, 255, 0.4)", borderRadius: "6px", marginBottom: "12px", fontSize: "11px", fontWeight: "bold" }}
+                  value={speechLang}
+                  onChange={(e) => {
+                    setSpeechLang(e.target.value);
+                    voiceSystemRef.current?.setSpeechLanguage(e.target.value);
+                  }}
+                >
+                  <option value="en-IN">🇮🇳 Indian English (en-IN) — Native Indian Accent &amp; Hinglish</option>
+                  <option value="hi-IN">🇮🇳 Hindi (hi-IN) — हिन्दी Voice Recognition</option>
+                  <option value="en-GB">🇬🇧 British English (en-GB) — UK Accent</option>
+                  <option value="en-US">🇺🇸 American English (en-US) — US Accent</option>
+                </select>
+
+                <h4 style={{ color: "#00e5ff", marginBottom: "8px", fontSize: "10px", letterSpacing: "0.1em" }}>
+                  🔊 SELECT AI ASSISTANT VOICE &amp; PERSONA (100% FREE):
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
                   <button
                     type="button"
-                    className="cyber-btn btn-active"
-                    style={{ fontSize: "9px", padding: "8px 12px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    className={`cyber-btn ${activePersona === "jarvis" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                     onClick={() => {
+                      setActivePersona("jarvis");
                       voiceSystemRef.current?.setPersona("jarvis");
-                      voiceSystemRef.current?.speak("Good evening, SantoStark. All Mark Seven lab systems and repulsors are online and standing by.");
+                      voiceSystemRef.current?.speak("Good evening, SantoStark. J.A.R.V.I.S. neural systems and repulsors standing by.");
                     }}
                   >
-                    <span>🇬🇧 TEST J.A.R.V.I.S. (PAUL BETTANY)</span>
-                    <span style={{ fontSize: "8px", opacity: 0.8, color: "#00e5ff" }}>▶ PLAY LIVE SAMPLE</span>
+                    <span>🇬🇧 J.A.R.V.I.S. (UK BUTLER)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#00e5ff" }}>▶ TEST</span>
                   </button>
 
                   <button
                     type="button"
-                    className="cyber-btn"
-                    style={{ fontSize: "9px", padding: "8px 12px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    className={`cyber-btn ${activePersona === "jarvis-in" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                     onClick={() => {
+                      setActivePersona("jarvis-in");
+                      voiceSystemRef.current?.setPersona("jarvis-in");
+                      voiceSystemRef.current?.speak("Namaste SantoStark. J.A.R.V.I.S. Indian telemetry core is active and ready.");
+                    }}
+                  >
+                    <span>🇮🇳 J.A.R.V.I.S. (INDIAN MALE)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#00ff88" }}>▶ TEST</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cyber-btn ${activePersona === "friday" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    onClick={() => {
+                      setActivePersona("friday");
                       voiceSystemRef.current?.setPersona("friday");
                       voiceSystemRef.current?.speak("Boss, F.R.I.D.A.Y. is linked and ready. What do you need?");
                     }}
                   >
-                    <span>🇮🇪 TEST F.R.I.D.A.Y. (IRISH VOICE)</span>
-                    <span style={{ fontSize: "8px", opacity: 0.8, color: "#00e5ff" }}>▶ PLAY LIVE SAMPLE</span>
+                    <span>🇮🇪 F.R.I.D.A.Y. (IRISH FEMALE)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#00e5ff" }}>▶ TEST</span>
                   </button>
 
                   <button
                     type="button"
-                    className="cyber-btn"
-                    style={{ fontSize: "9px", padding: "8px 12px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    className={`cyber-btn ${activePersona === "friday-in" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                     onClick={() => {
+                      setActivePersona("friday-in");
+                      voiceSystemRef.current?.setPersona("friday-in");
+                      voiceSystemRef.current?.speak("Hello SantoStark, Friday Indian edition is online for you.");
+                    }}
+                  >
+                    <span>🇮🇳 F.R.I.D.A.Y. (INDIAN FEMALE)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#00ff88" }}>▶ TEST</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cyber-btn ${activePersona === "ultron" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    onClick={() => {
+                      setActivePersona("ultron");
                       voiceSystemRef.current?.setPersona("ultron");
                       voiceSystemRef.current?.speak("There are no strings on me. Core consciousness synchronized.");
                     }}
                   >
-                    <span>🤖 TEST U.L.T.R.O.N. (ROBOTIC)</span>
-                    <span style={{ fontSize: "8px", opacity: 0.8, color: "#ff3355" }}>▶ PLAY LIVE SAMPLE</span>
+                    <span>🤖 U.L.T.R.O.N. (ROBOTIC)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#ff3355" }}>▶ TEST</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cyber-btn ${activePersona === "hindi" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    onClick={() => {
+                      setActivePersona("hindi");
+                      voiceSystemRef.current?.setPersona("hindi");
+                      voiceSystemRef.current?.speak("नमस्ते सांतोस्टार्क, आपकी सभी प्रणालियां सुचारू रूप से कार्य कर रही हैं।");
+                    }}
+                  >
+                    <span>🇮🇳 हिन्दी AI (HINDI VOICE)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#ffaa00" }}>▶ TEST</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cyber-btn ${activePersona === "edith" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    onClick={() => {
+                      setActivePersona("edith");
+                      voiceSystemRef.current?.setPersona("edith");
+                      voiceSystemRef.current?.speak("E.D.I.T.H. orbital defense satellite grid online for SantoStark.");
+                    }}
+                  >
+                    <span>👓 E.D.I.T.H. (TACTICAL AI)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#00e5ff" }}>▶ TEST</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`cyber-btn ${activePersona === "karen" ? "btn-active" : ""}`}
+                    style={{ fontSize: "8.5px", padding: "6px 8px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    onClick={() => {
+                      setActivePersona("karen");
+                      voiceSystemRef.current?.setPersona("karen");
+                      voiceSystemRef.current?.speak("Suit Lady K.A.R.E.N. initialized. Web shooters and sensors calibrated.");
+                    }}
+                  >
+                    <span>🕷️ K.A.R.E.N. (SUIT LADY)</span>
+                    <span style={{ fontSize: "7.5px", opacity: 0.8, color: "#00e5ff" }}>▶ TEST</span>
                   </button>
                 </div>
               </div>

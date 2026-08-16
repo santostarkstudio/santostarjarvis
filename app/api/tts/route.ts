@@ -159,14 +159,47 @@ export async function GET(req: NextRequest) {
   let pitch = "+0Hz";
   let rate = "+2%";
 
-  if (persona === "friday") {
-    voice = "en-IE-EmilyNeural"; // Authentic Irish FRIDAY style
-    pitch = "+10Hz";
-    rate = "+5%";
-  } else if (persona === "ultron") {
-    voice = "en-US-GuyNeural"; // Deep American Ultron
-    pitch = "-22Hz";
-    rate = "-4%";
+  switch (persona) {
+    case "friday":
+      voice = "en-IE-EmilyNeural"; // Authentic Irish FRIDAY style
+      pitch = "+8Hz";
+      rate = "+5%";
+      break;
+    case "ultron":
+      voice = "en-US-GuyNeural"; // Deep menacing robotic ULTRON
+      pitch = "-25Hz";
+      rate = "-5%";
+      break;
+    case "jarvis-in":
+      voice = "en-IN-PrabhatNeural"; // Indian English Male J.A.R.V.I.S.
+      pitch = "+0Hz";
+      rate = "+3%";
+      break;
+    case "friday-in":
+      voice = "en-IN-NeerjaNeural"; // Indian English Female F.R.I.D.A.Y.
+      pitch = "+5Hz";
+      rate = "+4%";
+      break;
+    case "hindi":
+      voice = "hi-IN-MadhurNeural"; // Native Hindi Male Assistant
+      pitch = "+0Hz";
+      rate = "+2%";
+      break;
+    case "edith":
+      voice = "en-US-ChristopherNeural"; // E.D.I.T.H. Tactical AI
+      pitch = "+2Hz";
+      rate = "+4%";
+      break;
+    case "karen":
+      voice = "en-US-AriaNeural"; // Spider-Man Suit Lady K.A.R.E.N.
+      pitch = "+6Hz";
+      rate = "+3%";
+      break;
+    default:
+      voice = "en-GB-RyanNeural"; // Classic Paul Bettany British JARVIS
+      pitch = "+0Hz";
+      rate = "+2%";
+      break;
   }
 
   try {

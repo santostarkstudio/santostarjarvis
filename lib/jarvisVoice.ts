@@ -3,7 +3,15 @@ import type { ThemeId } from "./themes";
 import { deviceAutomation } from "./deviceAutomation";
 import { aiProviderService } from "./aiProviders";
 
-export type AssistantPersona = "ultron" | "friday" | "jarvis";
+export type AssistantPersona =
+  | "jarvis"
+  | "friday"
+  | "ultron"
+  | "jarvis-in"
+  | "friday-in"
+  | "hindi"
+  | "edith"
+  | "karen";
 
 export interface VoiceCommandCallbacks {
   onThemeChange(theme: ThemeId): void;
@@ -65,6 +73,22 @@ export class JarvisVoiceSystem {
   public setPersona(persona: AssistantPersona): void {
     this.persona = persona;
     this.initVoices();
+  }
+
+  public setSpeechLanguage(lang: string): void {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("ultron_speech_lang", lang);
+    }
+    if (this.recognition) {
+      this.recognition.lang = lang;
+    }
+  }
+
+  public getSpeechLanguage(): string {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ultron_speech_lang") || "en-IN";
+    }
+    return "en-IN";
   }
 
   private initVoices(): void {
