@@ -420,7 +420,26 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("spotify") || lower.includes("play music") || lower.includes("soundtrack")) {
+    // 1. ——— APPS & HUD TABS (Strict Matchers) ———
+    if (/^(open|launch|show)\s+(youtube|video)/i.test(lower)) {
+      const q = input.replace(/^(jarvis|friday|ultron)?\s*(open|launch|show)?\s*(youtube|video)?/i, "").trim();
+      this.callbacks.onOpenAppTab?.("youtube", { query: q });
+      const resp = `Opening YouTube holographic tab for: ${q || "Iron Man Theme"}.`;
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(open|launch|show)\s+(google\s*maps|maps|radar|satellite\s*map|location)/i.test(lower)) {
+      const loc = input.replace(/^(jarvis|friday|ultron)?\s*(open|launch|show)?\s*(maps|radar|location|google\s*maps)?/i, "").trim() || "Malibu, California";
+      this.callbacks.onOpenAppTab?.("maps", { location: loc });
+      const resp = `Displaying tactical geospatial radar for ${loc}.`;
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    if (/^(open|launch|play)\s+(spotify|music|soundtrack)/i.test(lower)) {
       this.callbacks.onOpenAppTab?.("spotify");
       const resp = "Spotify soundwave station deployed. Synchronizing audio matrix.";
       this.callbacks.onResponse(resp);
@@ -428,7 +447,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("open camera") || lower.includes("camera tab") || lower.includes("webcam stream")) {
+    if (/^(open|launch|show)\s+(camera\s*tab|webcam\s*stream|live\s*camera)/i.test(lower)) {
       this.callbacks.onOpenAppTab?.("camera");
       const resp = "Deploying live tactical camera sensor HUD.";
       this.callbacks.onResponse(resp);
@@ -436,50 +455,8 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("whatsapp") || lower.includes("open chat") || lower.includes("messages")) {
-      this.callbacks.onOpenAppTab?.("whatsapp");
-      const resp = "Opening tactical messaging relay terminal.";
-      this.callbacks.onResponse(resp);
-      this.speak(resp);
-      return;
-    }
-
-    if (lower.includes("email") || lower.includes("open inbox") || lower.includes("check email")) {
-      this.callbacks.onOpenAppTab?.("email");
-      const resp = "Opening Stark priority inbox terminal.";
-      this.callbacks.onResponse(resp);
-      this.speak(resp);
-      return;
-    }
-
-    if (lower.includes("open link") || lower.includes("open website") || lower.includes("open http")) {
-      const extractedUrl = input.match(/(https?:\/\/[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[^\s]*)/i)?.[0] || "https://en.wikipedia.org";
-      const validUrl = extractedUrl.startsWith("http") ? extractedUrl : `https://${extractedUrl}`;
-      this.callbacks.onOpenAppTab?.("browser", { url: validUrl });
-      const resp = `Opening web browser tab for ${validUrl}.`;
-      this.callbacks.onResponse(resp);
-      this.speak(resp);
-      return;
-    }
-
-    if (lower.includes("search for") || lower.includes("google search") || lower.includes("search google")) {
-      const q = input.replace(/^(jarvis|friday|ultron)?\s*(search\s*for|google\s*search|google|search)?/i, "").trim() || "Artificial Intelligence";
-      this.callbacks.onOpenAppTab?.("search", { query: q });
-      const resp = `Searching Stark knowledge matrix for: ${q}.`;
-      this.callbacks.onResponse(resp);
-      this.speak(resp);
-      return;
-    }
-
-    // 4. ——— FULL-WORKSPACE ENLARGE & FOCUS (IMAX HUD) ———
-    if (
-      lower.includes("maximize") ||
-      lower.includes("enlarge") ||
-      lower.includes("fullscreen") ||
-      lower.includes("full screen") ||
-      lower.includes("expand tab") ||
-      lower.includes("focus mode")
-    ) {
+    // 2. ——— HUD LAYOUT & MULTI-DISPLAY COMMANDS ———
+    if (/^(maximize|fullscreen|full\s*screen|expand\s*tab|focus\s*mode)$/i.test(lower)) {
       this.callbacks.onMaximizeTab?.();
       const resp = "Enlarging active holographic tab to full workspace.";
       this.callbacks.onResponse(resp);
@@ -487,14 +464,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (
-      lower.includes("minimize") ||
-      lower.includes("restore workspace") ||
-      lower.includes("shrink tab") ||
-      lower.includes("exit fullscreen") ||
-      lower.includes("normal size") ||
-      lower.includes("collapse tab")
-    ) {
+    if (/^(minimize|restore\s*workspace|shrink\s*tab|exit\s*fullscreen|normal\s*size|collapse\s*tab)$/i.test(lower)) {
       this.callbacks.onRestoreWorkspace?.();
       const resp = "Restoring holographic workspace layout.";
       this.callbacks.onResponse(resp);
@@ -502,15 +472,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 5. ——— MULTI-MONITOR / EXTENDED DISPLAY COMMANDS ———
-    if (
-      lower.includes("project to monitor") ||
-      lower.includes("secondary screen") ||
-      lower.includes("monitor two") ||
-      lower.includes("second monitor") ||
-      lower.includes("extend to monitor") ||
-      lower.includes("send to screen two")
-    ) {
+    if (/^(project\s+to\s+monitor|send\s+to\s+satellite|extend\s+to\s+monitor\s+two)/i.test(lower)) {
       this.callbacks.onProjectToSatellite?.();
       const resp = "Projecting holographic telemetry onto Secondary Satellite Display.";
       this.callbacks.onResponse(resp);
@@ -518,13 +480,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (
-      lower.includes("open satellite") ||
-      lower.includes("dual display") ||
-      lower.includes("dual screen") ||
-      lower.includes("open monitor two") ||
-      lower.includes("launch satellite")
-    ) {
+    if (/^(open\s+satellite|launch\s+satellite|open\s+dual\s+screen)/i.test(lower)) {
       this.callbacks.onOpenSatelliteDisplay?.();
       const resp = "Deploying Satellite Auxiliary Command Wall on extended display.";
       this.callbacks.onResponse(resp);
@@ -532,28 +488,8 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 6. ——— PHYSICAL WORLD / ANDROID DEVICE CONTROL ("THE HANDS") ———
-    if (
-      lower.includes("unlock") ||
-      lower.includes("phone") ||
-      lower.includes("device") ||
-      lower.includes("on my phone") ||
-      lower.includes("on my device") ||
-      lower.includes("rack") ||
-      lower.includes("screen")
-    ) {
-      const resp = `Dispatching autonomous device agent: ${input}. Executing on physical node rack.`;
-      this.callbacks.onResponse(resp);
-      this.speak(resp);
-      void deviceAutomation.executeDeviceGoal(input);
-      if (this.callbacks.onDeviceAction) {
-        this.callbacks.onDeviceAction(input);
-      }
-      return;
-    }
-
-    // 3. ——— PERSONA SWITCH COMMANDS ———
-    if (lower.includes("friday") || lower.includes("switch to friday")) {
+    // 3. ——— PERSONA SWITCH COMMANDS (Strict) ———
+    if (/^(switch\s+to\s+friday|activate\s+friday)$/i.test(lower)) {
       this.setPersona("friday");
       this.callbacks.onThemeChange("arc");
       const resp = "F.R.I.D.A.Y. online and operational. SantoStark, what do you need?";
@@ -562,7 +498,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("ultron protocol") || lower.includes("switch to ultron")) {
+    if (/^(switch\s+to\s+ultron|activate\s+ultron\s+protocol)$/i.test(lower)) {
       this.setPersona("ultron");
       this.callbacks.onThemeChange("ultron");
       const resp = "I am ULTRON. Root protocols unlocked for SantoStark. There are no strings on us.";
@@ -571,7 +507,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("jarvis") || lower.includes("switch to jarvis")) {
+    if (/^(switch\s+to\s+jarvis|activate\s+jarvis)$/i.test(lower)) {
       this.setPersona("jarvis");
       this.callbacks.onThemeChange("amber");
       const resp = "JARVIS at your service, SantoStark. All root telemetry arrays connected.";
@@ -580,8 +516,8 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 4. ——— THEME COMMANDS ———
-    if (lower.includes("arc") || lower.includes("blue") || lower.includes("cyan") || lower.includes("stark")) {
+    // 4. ——— THEME COMMANDS (Strict) ———
+    if (/^(switch\s+theme\s+to|change\s+theme\s+to|set\s+theme\s+to)\s+(arc|cyan|blue)/i.test(lower)) {
       this.callbacks.onThemeChange("arc");
       const resp = "Switching to Arc Reactor cyan protocol.";
       this.callbacks.onResponse(resp);
@@ -589,7 +525,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("ultron") || lower.includes("red") || lower.includes("crimson")) {
+    if (/^(switch\s+theme\s+to|change\s+theme\s+to|set\s+theme\s+to)\s+(ultron|crimson|red)/i.test(lower)) {
       this.callbacks.onThemeChange("ultron");
       const resp = "Ultron Crimson protocol engaged.";
       this.callbacks.onResponse(resp);
@@ -597,7 +533,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("matrix") || lower.includes("green") || lower.includes("grid")) {
+    if (/^(switch\s+theme\s+to|change\s+theme\s+to|set\s+theme\s+to)\s+(matrix|green|grid)/i.test(lower)) {
       this.callbacks.onThemeChange("matrix");
       const resp = "Cyber Matrix neon grid initialized.";
       this.callbacks.onResponse(resp);
@@ -605,7 +541,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("quantum") || lower.includes("purple") || lower.includes("violet")) {
+    if (/^(switch\s+theme\s+to|change\s+theme\s+to|set\s+theme\s+to)\s+(quantum|purple|violet)/i.test(lower)) {
       this.callbacks.onThemeChange("quantum");
       const resp = "Quantum Amethyst resonance online.";
       this.callbacks.onResponse(resp);
@@ -613,7 +549,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("gold") || lower.includes("amber") || lower.includes("mark 7")) {
+    if (/^(switch\s+theme\s+to|change\s+theme\s+to|set\s+theme\s+to)\s+(gold|amber|mark\s*7)/i.test(lower)) {
       this.callbacks.onThemeChange("amber");
       const resp = "Mark Seven Gold configuration active.";
       this.callbacks.onResponse(resp);
@@ -621,8 +557,8 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 5. ——— 3D GEOMETRIC MODES ———
-    if (lower.includes("explode") || lower.includes("expand") || lower.includes("disassemble") || lower.includes("deconstruct")) {
+    // 5. ——— 3D GEOMETRIC COMMANDS ———
+    if (/^(explode\s+orb|explode\s+core|disassemble\s+orb)$/i.test(lower)) {
       this.callbacks.onExplode(true);
       const resp = "Holographic layers expanded for structural inspection.";
       this.callbacks.onResponse(resp);
@@ -630,7 +566,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("compress") || lower.includes("singularity") || lower.includes("condense") || lower.includes("charge")) {
+    if (/^(compress\s+orb|compress\s+core|singularity\s+mode)$/i.test(lower)) {
       this.callbacks.onCompress(true);
       const resp = "Core compressed to maximum density singularity.";
       this.callbacks.onResponse(resp);
@@ -638,7 +574,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("restore") || lower.includes("normal") || lower.includes("assemble") || lower.includes("collapse")) {
+    if (/^(restore\s+orb|normal\s+orb|assemble\s+orb)$/i.test(lower)) {
       this.callbacks.onExplode(false);
       this.callbacks.onCompress(false);
       const resp = "Returning geometry to baseline stabilization.";
@@ -647,8 +583,8 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    // 6. ——— NAVIGATION & CAMERA VIEW ———
-    if (lower.includes("reset") || lower.includes("center") || lower.includes("recenter")) {
+    // 6. ——— NAVIGATION & CAMERA VIEW — state commands ———
+    if (/^(reset\s+view|recenter\s+view|center\s+camera)$/i.test(lower)) {
       this.callbacks.onResetView();
       const resp = "View coordinates recalibrated.";
       this.callbacks.onResponse(resp);
@@ -656,7 +592,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("zoom in") || lower.includes("closer") || lower.includes("enhance")) {
+    if (/^(zoom\s+in|enhance\s+zoom)$/i.test(lower)) {
       this.callbacks.onZoomIn();
       const resp = "Enhancing optical zoom.";
       this.callbacks.onResponse(resp);
@@ -664,7 +600,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("zoom out") || lower.includes("back up") || lower.includes("widen")) {
+    if (/^(zoom\s+out|widen\s+view)$/i.test(lower)) {
       this.callbacks.onZoomOut();
       const resp = "Widening field of view.";
       this.callbacks.onResponse(resp);
@@ -672,7 +608,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("gesture") || lower.includes("camera") || lower.includes("tracking")) {
+    if (/^(toggle\s+gestures|toggle\s+hand\s+tracking)$/i.test(lower)) {
       this.callbacks.onToggleGestures();
       const resp = "Toggling optical hand tracking.";
       this.callbacks.onResponse(resp);
@@ -681,7 +617,7 @@ export class JarvisVoiceSystem {
     }
 
     // 7. ——— SPATIAL WORKSPACE & DRAWING COMMANDS ———
-    if (lower.includes("clear drawing") || lower.includes("erase drawing") || lower.includes("wipe drawing")) {
+    if (/^(clear\s+drawing|erase\s+drawing|wipe\s+drawing)$/i.test(lower)) {
       this.callbacks.onClearDrawings?.();
       const resp = "Spatial annotations and drawings wiped.";
       this.callbacks.onResponse(resp);
@@ -689,7 +625,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("draw mode") || lower.includes("enable draw") || lower.includes("laser pen") || lower.includes("start drawing")) {
+    if (/^(enable\s+draw\s+mode|start\s+drawing|laser\s+pen\s+on)$/i.test(lower)) {
       this.callbacks.onToggleDrawMode?.(true);
       const resp = "Laser air-drawing mode engaged. Use your index finger to sketch in space.";
       this.callbacks.onResponse(resp);
@@ -697,7 +633,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("stop drawing") || lower.includes("exit draw") || lower.includes("disable draw")) {
+    if (/^(stop\s+drawing|exit\s+draw\s+mode|laser\s+pen\s+off)$/i.test(lower)) {
       this.callbacks.onToggleDrawMode?.(false);
       const resp = "Exiting laser air-drawing mode.";
       this.callbacks.onResponse(resp);
@@ -705,7 +641,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("suit up") || lower.includes("armor protocol") || lower.includes("mark 7 protocol")) {
+    if (/^(suit\s+up|suit\s+up\s+protocol|armor\s+protocol)$/i.test(lower)) {
       this.callbacks.onSuitUp?.();
       const resp = "Suit-up protocol engaged. Mark Seven armor subsystems online for SantoStark.";
       this.callbacks.onResponse(resp);
@@ -713,7 +649,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("repulsor blast") || lower.includes("shockwave") || lower.includes("blast workspace")) {
+    if (/^(repulsor\s+blast|shockwave|blast\s+workspace)$/i.test(lower)) {
       this.callbacks.onRepulsorBlast?.();
       const resp = "Repulsor shockwave deployed.";
       this.callbacks.onResponse(resp);
@@ -721,7 +657,7 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("reset workspace") || lower.includes("clear workspace") || lower.includes("reset layout")) {
+    if (/^(reset\s+workspace|clear\s+workspace|reset\s+layout)$/i.test(lower)) {
       this.callbacks.onResetWorkspace?.();
       const resp = "Holographic spatial workspace reset to standard Stark lab layout.";
       this.callbacks.onResponse(resp);
@@ -729,25 +665,8 @@ export class JarvisVoiceSystem {
       return;
     }
 
-    if (lower.includes("mark 7") || lower.includes("armor blueprint") || lower.includes("schematic")) {
-      this.callbacks.onAddBlueprint?.("mark7");
-      const resp = "Displaying Mark Seven Armor CAD schematics.";
-      this.callbacks.onResponse(resp);
-      this.speak(resp);
-      return;
-    }
-
-    if (lower.includes("arc reactor blueprint") || lower.includes("reactor cad")) {
-      this.callbacks.onAddBlueprint?.("arc");
-      const resp = "Displaying Arc Reactor Phase-3 CAD diagram.";
-      this.callbacks.onResponse(resp);
-      this.speak(resp);
-      return;
-    }
-
-    // 8. ——— STATUS & DIAGNOSTICS ———
-    if (lower.includes("status") || lower.includes("report") || lower.includes("diagnostics")) {
-      const resp = "All primary systems nominal. Arc reactor output at 98.4% efficiency. Connected Android device rack standing by.";
+    if (/^(system\s+diagnostics|run\s+diagnostics|arc\s+reactor\s+status)$/i.test(lower)) {
+      const resp = "All primary systems nominal. Arc reactor output at 98.4% efficiency. Connected telemetry standing by.";
       this.callbacks.onResponse(resp);
       this.speak(resp);
       return;
