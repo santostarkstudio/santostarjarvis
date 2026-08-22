@@ -5,7 +5,6 @@
 **Live Production URL:** [https://santostarkjarvis.vercel.app](https://santostarkjarvis.vercel.app)  
 **Mobile Remote Controller:** [https://santostarkjarvis.vercel.app/remote](https://santostarkjarvis.vercel.app/remote)  
 **GitHub Repository:** `https://github.com/santostarkstudio/santostarjarvis.git`  
-**GitHub Token:** `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`  
 **Supabase Vault URL:** `https://ldbbdjrolchouvyrkhin.supabase.co`
 
 ---
@@ -57,8 +56,8 @@ Open: `http://localhost:3000`
 ### Push Updates to GitHub & Vercel:
 ```cmd
 git add .
-git commit -m "Deploy Stark Triple-Hybrid AI Fusion (Ollama + Groq + Gemini), Deep Space 3D, and Mobile Remote"
-git push https://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@github.com/santostarkstudio/santostarjarvis.git main
+git commit -m "Deploy Stark Triple-Hybrid AI Fusion"
+git push
 ```
 
 ==============================================================================
