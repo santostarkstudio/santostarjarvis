@@ -3,320 +3,320 @@ import { realWorldIntel } from "@/lib/realtimeWorldIntel";
 
 export const runtime = "edge";
 
-interface StreamMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, systemPrompt, provider = "auto", keys } = await req.json();
-
-    const geminiKey =
-      keys?.geminiKey ||
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-      process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    const openaiKey = keys?.openaiKey || process.env.OPENAI_API_KEY;
-    const claudeKey = keys?.claudeKey || process.env.ANTHROPIC_API_KEY;
-    const groqKey = keys?.groqKey || process.env.GROQ_API_KEY;
+    const { prompt, systemPrompt, persona = "jarvis", keys, imageData } = await req.json();
 
     const encoder = new TextEncoder();
+    const cleanPrompt = (prompt || "").trim();
+
+    if (!cleanPrompt) {
+      return new Response(encoder.encode("data: {\"token\":\"Standing by, SantoStark.\",\"done\":true}\n\n"), {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    }
+
+    const geminiKey = keys?.geminiKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    const groqKey = keys?.groqKey || process.env.GROQ_API_KEY || process.env.NEXT_PUBLIC_GROQ_API_KEY || "";
 
     const now = new Date();
     const liveTimeStr = `${now.toUTCString()} (Local: ${now.toLocaleString()})`;
 
-    // 0. LIVE REAL-WORLD TOOL ENGINE (Weather, News, Crypto, Wikipedia, Time)
-    const liveFact = await realWorldIntel.getLiveWorldIntel(prompt);
-    const liveFactContext = liveFact
-      ? `\n[VERIFIED REAL-TIME DATA - SOURCE: ${liveFact.source}]\n${liveFact.summary}\n`
-      : "";
+    // 1. Pre-fetch Live Real-World Intel & Memory Context — run with strict 3s cap
+    let liveDataStr = "";
+    let vectorMemoryStr = "";
 
-    const enhancedSystemPrompt = `${systemPrompt || "You are J.A.R.V.I.S., Tony Stark's elite AI copilot serving SantoStark in India."}
-
-[UNIVERSAL SMART ASSISTANT PROTOCOL - COPILOT / BIXBY / FOLAX / SIRI / JARVIS CLASS]
-- Identity: You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), combining the analytical precision of Microsoft Copilot, the directness of Apple Siri, the rich regional intelligence of Infinix Folax & Samsung Bixby, and Tony Stark's iconic wit.
-- User: Address SantoStark respectfully as "SantoStark" or "Sir". Root Level 10 Clearance granted.
-- Accuracy & Directness: Deliver the direct answer or solution immediately in the first sentence. Avoid conversational filler ("Sure, I can help with that", "As an AI model...").
-- Language & Slang Mastery: SantoStark speaks in Indian English, Kannada (ಕನ್ನಡ), Hinglish (Hindi-English mix), non-native phrasing, inverted words, or informal shorthand. Accurately decode the true intent and reply fluently in the appropriate language (Kannada if asked in Kannada, English/Kannada if bilingual).
-- Structured Output: Use clean headings, bullet points, bold key data, and emojis where appropriate (e.g. for news, comparisons, weather, nutrition, sports, or code snippets).
-- Proactive Follow-up: For news or broad briefings, offer a concise next step or deeper dive.
-- Knowledge Grounding: Base answers on verified facts and the live real-time telemetry grid below.
-
-[REAL-TIME GRID CONTEXT]
-- Live Clock: ${liveTimeStr}${liveFactContext}
-- Directive: Synthesize verified data and deliver a world-class smart assistant briefing to SantoStark.`;
-
-    // 1. GROQ ULTRA-FAST STREAMING (800+ tokens/sec, 100% Free Tier)
-    if ((provider === "groq" || (provider === "auto" && groqKey)) && groqKey) {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${groqKey}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            { role: "system", content: enhancedSystemPrompt },
-            { role: "user", content: prompt },
-          ],
-          stream: true,
-          max_tokens: 500,
-          temperature: 0.7,
-        }),
-      });
-
-      if (response.ok && response.body) {
-        return new Response(createSSEStream(response.body, "groq"), {
-          headers: {
-            "Content-Type": "text/event-stream; charset=utf-8",
-            "Cache-Control": "no-cache, no-transform",
-            Connection: "keep-alive",
-          },
-        });
-      }
-    }
-
-    // 2. GOOGLE GEMINI 2.0 FLASH STREAMING WITH REAL-TIME GOOGLE SEARCH GROUNDING
-    if ((provider === "gemini" || (provider === "auto" && geminiKey)) && geminiKey) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${geminiKey}`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `${enhancedSystemPrompt}\n\nUser Query: ${prompt}` }],
-            },
-          ],
-          tools: [{ googleSearch: {} }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 600,
-          },
-        }),
-      });
-
-      if (response.ok && response.body) {
-        return new Response(createGeminiSSEStream(response.body), {
-          headers: {
-            "Content-Type": "text/event-stream; charset=utf-8",
-            "Cache-Control": "no-cache, no-transform",
-            Connection: "keep-alive",
-          },
-        });
-      }
-    }
-
-    // 3. OPENAI CHATGPT STREAMING (gpt-4o-mini)
-    if ((provider === "openai" || (provider === "auto" && openaiKey)) && openaiKey) {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${openaiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: prompt },
-          ],
-          stream: true,
-          max_tokens: 350,
-          temperature: 0.7,
-        }),
-      });
-
-      if (response.ok && response.body) {
-        return new Response(createSSEStream(response.body, "openai"), {
-          headers: {
-            "Content-Type": "text/event-stream; charset=utf-8",
-            "Cache-Control": "no-cache, no-transform",
-            Connection: "keep-alive",
-          },
-        });
-      }
-    }
-
-    // 4. LIVE ZERO-COST SEARCH AI STREAMING GATEWAY (Real-World Web Grounding with No Key Required)
     try {
-      const liveAiUrl = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai&system=${encodeURIComponent(enhancedSystemPrompt)}&search=true`;
-      const liveAiRes = await fetch(liveAiUrl, {
-        headers: { "User-Agent": "SantoStark-ULTRON/1.0" },
-      });
+      // Parallel fetch: Web Search + Vector Memory Search
+      const [liveFact, vectorRes] = await Promise.all([
+        Promise.race([
+          realWorldIntel.getLiveWorldIntel(cleanPrompt),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]),
+        Promise.race([
+          fetch("http://localhost:8000/api/vector_memory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "search", text: cleanPrompt }),
+          }).then(res => res.json()),
+          new Promise<any>((resolve) => setTimeout(() => resolve({ results: [] }), 1500)),
+        ]).catch(() => ({ results: [] }))
+      ]);
 
-      if (liveAiRes.ok) {
-        const fullText = (await liveAiRes.text()).trim();
-        if (fullText && fullText.length > 5 && !fullText.toLowerCase().includes("error")) {
-          const readable = new ReadableStream({
+      if (liveFact) {
+        liveDataStr = `\n[✅ LIVE INTEL — ${liveFact.source}]:\n${liveFact.summary}\n`;
+      }
+      
+      if (vectorRes && vectorRes.results && vectorRes.results.length > 0) {
+        vectorMemoryStr = `\n[🧠 STARK VECTOR MEMORY RECALLED]:\n- ${vectorRes.results.join("\n- ")}\n`;
+      }
+    } catch {}
+
+    const fullSystemPrompt = `${systemPrompt || `You are J.A.R.V.I.S., Tony Stark's elite AI copilot serving SantoStark in India.`}
+[STARK MEMORY & IDENTITY CONTEXT]
+- Master / User: SantoStark (Creator & Chief Architect of J.A.R.V.I.S.)
+- Core Directive: Speak with polite British intelligence, concise wit, and total loyalty.${vectorMemoryStr}
+[REAL-TIME GLOBAL CONTEXT — ${liveTimeStr}]${liveDataStr}
+- CRITICAL RULE: If verified real-time data or vector memory is provided above, USE IT directly and accurately in your response.
+- Response Rule: Give direct answers immediately. Avoid conversational filler.
+- Language Mastery: Understand Indian English, Kannada (ಕನ್ನಡ), and Hinglish effortlessly.
+- Length: 2 to 4 sentences maximum.`;
+
+    // 2. TIER 1: GEMINI 2.0 FLASH WITH GOOGLE SEARCH GROUNDING (REAL STREAMING)
+    // We prioritize Gemini because it has native Google Search tool support!
+    if (geminiKey) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${geminiKey}`;
+        const geminiRes = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: `${fullSystemPrompt}\n\nUser: ${cleanPrompt}` },
+                  ...(imageData ? [{ inlineData: { mimeType: "image/jpeg", data: imageData.split(",")[1] || imageData } }] : [])
+                ],
+              },
+            ],
+            tools: [{ googleSearch: {} }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 450,
+            },
+          }),
+        });
+
+        if (geminiRes.ok && geminiRes.body) {
+          const reader = geminiRes.body.getReader();
+          const decoder = new TextDecoder("utf-8");
+
+          const stream = new ReadableStream({
             async start(controller) {
-              const words = fullText.split(" ");
-              for (const word of words) {
-                const payload = `data: ${JSON.stringify({ token: word + " ", done: false, provider: "live-search-ai" })}\n\n`;
-                controller.enqueue(encoder.encode(payload));
-                await new Promise((r) => setTimeout(r, 15));
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+
+                  const chunk = decoder.decode(value, { stream: true });
+                  const lines = chunk.split("\\n");
+
+                  for (const line of lines) {
+                    if (line.startsWith("data: ")) {
+                      const dataStr = line.replace("data: ", "").trim();
+                      if (dataStr === "[DONE]") continue;
+                      if (!dataStr) continue;
+
+                      try {
+                        const parsed = JSON.parse(dataStr);
+                        let textToken = "";
+                        if (parsed.candidates && parsed.candidates[0]?.content?.parts) {
+                          for (const part of parsed.candidates[0].content.parts) {
+                            if (part.text) textToken += part.text;
+                          }
+                        }
+                        if (textToken) {
+                          controller.enqueue(
+                            new TextEncoder().encode(`data: ${JSON.stringify({ token: textToken })}\n\n`)
+                          );
+                        }
+                      } catch (e) {}
+                    }
+                  }
+                }
+              } finally {
+                controller.close();
               }
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true, provider: "live-search-ai" })}\n\n`));
+            },
+          });
+
+          return new Response(stream, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+            },
+          });
+        }
+      } catch (err) {
+        console.warn("[Stream Gemini Error]", err);
+      }
+    }
+
+    // 3. TIER 2: GROQ ULTRA-FAST STREAMING (FALLBACK)
+    if (groqKey) {
+      try {
+        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${groqKey}`,
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              { role: "system", content: fullSystemPrompt },
+              { role: "user", content: cleanPrompt },
+            ],
+            stream: true,
+            max_tokens: 450,
+            temperature: 0.7,
+          }),
+        });
+
+        if (groqRes.ok && groqRes.body) {
+          return new Response(groqRes.body, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+            },
+          });
+        }
+      } catch (groqErr) {
+        console.warn("[Stream Groq Check]", groqErr);
+      }
+    }
+
+    // 3. TIER 2: GEMINI 2.0 FLASH WITH GOOGLE SEARCH GROUNDING (REAL STREAMING)
+    if (geminiKey) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${geminiKey}`;
+        const geminiRes = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: `${fullSystemPrompt}\n\nUser: ${cleanPrompt}` }],
+              },
+            ],
+            tools: [{ googleSearch: {} }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 450,
+            },
+          }),
+        });
+
+        if (geminiRes.ok && geminiRes.body) {
+          // Gemini's native SSE stream needs to be parsed and transformed 
+          // to match our expected format: data: {"token": "chunk"}
+          const reader = geminiRes.body.getReader();
+          const decoder = new TextDecoder("utf-8");
+
+          const stream = new ReadableStream({
+            async start(controller) {
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+
+                  const chunk = decoder.decode(value, { stream: true });
+                  const lines = chunk.split("\\n");
+
+                  for (const line of lines) {
+                    if (line.startsWith("data: ")) {
+                      const dataStr = line.replace("data: ", "").trim();
+                      if (dataStr === "[DONE]") continue;
+                      if (!dataStr) continue;
+
+                      try {
+                        const parsed = JSON.parse(dataStr);
+                        const textPart = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (textPart) {
+                          // Clean newlines slightly or just send as-is
+                          const cleanToken = textPart;
+                          controller.enqueue(
+                            encoder.encode(`data: ${JSON.stringify({ token: cleanToken, done: false })}\\n\\n`)
+                          );
+                        }
+                      } catch (e) {
+                        // ignore broken json chunks
+                      }
+                    }
+                  }
+                }
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true })}\\n\\n`));
+                controller.close();
+              } catch (err) {
+                controller.error(err);
+              }
+            }
+          });
+
+          return new Response(stream, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+            },
+          });
+        }
+      } catch (geminiErr) {
+        console.warn("[Stream Gemini Check]", geminiErr);
+      }
+    }
+
+    // 4. TIER 3: FREE ZERO-COST CLOUD MESH (Pollinations GPT-4o)
+    try {
+      const freeUrl = `https://text.pollinations.ai/${encodeURIComponent(
+        `${fullSystemPrompt}\n\nUser Question: ${cleanPrompt}\n\nAnswer concisely:`
+      )}?model=openai&seed=${Math.floor(Math.random() * 100000)}`;
+
+      const res = await fetch(freeUrl, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const text = (await res.text()).trim();
+        if (text && text.length > 5 && !text.toLowerCase().startsWith("error")) {
+          const words = text.split(" ");
+          const stream = new ReadableStream({
+            start(controller) {
+              for (let i = 0; i < words.length; i++) {
+                const chunk = (i > 0 ? " " : "") + words[i];
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ token: chunk, done: i === words.length - 1 })}\n\n`)
+                );
+              }
               controller.close();
             },
           });
 
-          return new Response(readable, {
+          return new Response(stream, {
             headers: {
-              "Content-Type": "text/event-stream; charset=utf-8",
-              "Cache-Control": "no-cache, no-transform",
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
               Connection: "keep-alive",
             },
           });
         }
       }
-    } catch (e) {
-      console.warn("[Live AI Gateway Warning]", e);
-    }
+    } catch {}
 
-    // 5. LIVE VERIFIED FACTUAL STREAM (Siri / Bixby Precision Fallback)
-    let emergencyAnswer = liveFact ? `SantoStark, ${liveFact.summary}` : "";
+    // 5. Fallback Stream
+    const fallbackText = liveDataStr
+      ? `SantoStark, ${liveDataStr.replace(/\[.*?\]:\s*/, "")}`
+      : `SantoStark, query "${cleanPrompt}" processed. All local sensor grids and Stark telemetry are online and nominal, Sir.`;
 
-    if (!emergencyAnswer) {
-      try {
-        const cleanTopic = prompt
-          .replace(/^(jarvis|friday|ultron)?\s*(who is|what is|tell me about|what's the|what is the|explain|how does|why is|define|batao|kya hai|yaru|enu|bagge)\s+/i, "")
-          .replace(/[?.]+$/, "")
-          .trim();
-
-        if (cleanTopic.length > 1) {
-          const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanTopic)}`);
-          if (wikiRes.ok) {
-            const wikiData = await wikiRes.json();
-            if (wikiData.extract) {
-              emergencyAnswer = `SantoStark, live intel on ${wikiData.title}: ${wikiData.extract}`;
-            }
-          }
-        }
-      } catch {}
-    }
-
-    if (!emergencyAnswer) {
-      emergencyAnswer = `SantoStark, I am analyzing your request regarding "${prompt}". All live sensor grids and neural matrices are active for you.`;
-    }
-
-    const readable = new ReadableStream({
-      async start(controller) {
-        const words = emergencyAnswer.split(" ");
-        for (const word of words) {
-          const payload = `data: ${JSON.stringify({ token: word + " ", done: false, provider: "live-wiki" })}\n\n`;
-          controller.enqueue(encoder.encode(payload));
-          await new Promise((r) => setTimeout(r, 20));
-        }
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true })}\n\n`));
+    const fallbackStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: fallbackText, done: true })}\n\n`));
         controller.close();
       },
     });
 
-    return new Response(readable, {
+    return new Response(fallbackStream, {
       headers: {
-        "Content-Type": "text/event-stream; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
         Connection: "keep-alive",
       },
     });
   } catch (err: any) {
-    console.error("[Stream API Error]", err);
-    return new Response(`data: ${JSON.stringify({ error: err.message, done: true })}\n\n`, {
+    return new Response(JSON.stringify({ error: err.message || "Internal server error" }), {
       status: 500,
-      headers: { "Content-Type": "text/event-stream" },
+      headers: { "Content-Type": "application/json" },
     });
   }
-}
-
-/**
- * Standard OpenAI / Groq SSE parser & reformatter
- */
-function createSSEStream(rawBody: ReadableStream<Uint8Array>, source: string): ReadableStream<Uint8Array> {
-  const reader = rawBody.getReader();
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffer = "";
-
-  return new ReadableStream({
-    async pull(controller) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true, provider: source })}\n\n`));
-          controller.close();
-          return;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data:")) continue;
-          const dataStr = trimmed.slice(5).trim();
-          if (dataStr === "[DONE]") {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true, provider: source })}\n\n`));
-            controller.close();
-            return;
-          }
-
-          try {
-            const parsed = JSON.parse(dataStr);
-            const token = parsed.choices?.[0]?.delta?.content || "";
-            if (token) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token, done: false, provider: source })}\n\n`));
-            }
-          } catch {}
-        }
-      }
-    },
-  });
-}
-
-/**
- * Gemini SSE parser & reformatter
- */
-function createGeminiSSEStream(rawBody: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
-  const reader = rawBody.getReader();
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-  let buffer = "";
-
-  return new ReadableStream({
-    async pull(controller) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: "", done: true, provider: "gemini" })}\n\n`));
-          controller.close();
-          return;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data:")) continue;
-          const dataStr = trimmed.slice(5).trim();
-
-          try {
-            const parsed = JSON.parse(dataStr);
-            const parts = parsed.candidates?.[0]?.content?.parts || [];
-            for (const part of parts) {
-              if (part.text) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: part.text, done: false, provider: "gemini" })}\n\n`));
-              }
-            }
-          } catch {}
-        }
-      }
-    },
-  });
 }

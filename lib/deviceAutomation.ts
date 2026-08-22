@@ -278,6 +278,57 @@ export class DeviceAutomationEngine {
     return `Action '${goal}' executed across ${targetDev.name} (${targetDev.model}). All verification checks passed.`;
   }
 
+  /**
+   * Dispatches native Windows app launching commands
+   */
+  public async launchDesktopApp(app: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await fetch("/api/system/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app }),
+      });
+      const data = await res.json();
+      return { success: res.ok, message: data.message || data.error || "Command processed." };
+    } catch (e: any) {
+      return { success: false, message: e.message || "Failed to launch application." };
+    }
+  }
+
+  /**
+   * Dispatches native Windows OS actions (volume, lock, screenshot)
+   */
+  public async executeSystemAction(action: "lock" | "mute" | "volume_up" | "volume_down" | "screenshot"): Promise<{ success: boolean; message: string; url?: string }> {
+    try {
+      const res = await fetch("/api/system/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      return { success: res.ok, message: data.message || data.error || "System action processed.", url: data.url };
+    } catch (e: any) {
+      return { success: false, message: e.message || "Failed to execute system action." };
+    }
+  }
+
+  /**
+   * Persists a note or user preference into the Stark Memory Vault
+   */
+  public async saveMemoryNote(topic: string, content: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await fetch("/api/memory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add_note", topic, content }),
+      });
+      const data = await res.json();
+      return { success: res.ok, message: data.message || "Memory saved." };
+    } catch (e: any) {
+      return { success: false, message: e.message || "Failed to save memory." };
+    }
+  }
+
   private now(): string {
     const d = new Date();
     return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
@@ -289,3 +340,4 @@ export class DeviceAutomationEngine {
 }
 
 export const deviceAutomation = new DeviceAutomationEngine();
+

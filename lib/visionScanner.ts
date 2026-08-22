@@ -143,49 +143,48 @@ export class StarkVisionScanner {
     try {
       let screenBase64 = "";
 
-      // 1. Try to render a snapshot canvas of the active viewport
+      // 1. Capture real screen using getDisplayMedia
       try {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: "monitor" } as MediaTrackConstraints,
+        });
+
+        const tempVideo = document.createElement("video");
+        tempVideo.srcObject = stream;
+        tempVideo.muted = true;
+        tempVideo.playsInline = true;
+        await tempVideo.play();
+
+        // Wait a tiny bit for the video to render its first frame
+        await new Promise((r) => setTimeout(r, 300));
+
         const canvas = document.createElement("canvas");
-        canvas.width = Math.min(width, 1280);
-        canvas.height = Math.min(height, 800);
+        canvas.width = tempVideo.videoWidth || 1280;
+        canvas.height = tempVideo.videoHeight || 720;
+        
+        // Scale down if extremely large to save bandwidth (max 1080p equivalent)
+        if (canvas.width > 1920) {
+          const ratio = 1920 / canvas.width;
+          canvas.width = 1920;
+          canvas.height = Math.round(canvas.height * ratio);
+        }
+
         const ctx = canvas.getContext("2d");
-
         if (ctx) {
-          // Draw cyber HUD background
-          ctx.fillStyle = "#030812";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Draw active UI text and spatial cards summary onto canvas
-          ctx.fillStyle = "#00e5ff";
-          ctx.font = "bold 20px sans-serif";
-          ctx.fillText("STARK HOLOGRAPHIC WORKSPACE SNAPSHOT", 40, 50);
-
-          ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-          ctx.font = "14px sans-serif";
-          ctx.fillText(`Timestamp: ${new Date().toLocaleString()}`, 40, 80);
-          ctx.fillText(`Active User: SantoStark (Root Level 10 Clearance)`, 40, 105);
-
-          // Extract text from main document elements
-          const textSnippets = Array.from(document.querySelectorAll(".hud-card, .spatial-card, .transcript-line"))
-            .map((el) => (el as HTMLElement).innerText.slice(0, 150))
-            .filter(Boolean)
-            .slice(0, 8);
-
-          let y = 140;
-          for (const snip of textSnippets) {
-            ctx.fillStyle = "rgba(0, 229, 255, 0.2)";
-            ctx.fillRect(40, y - 18, canvas.width - 80, 28);
-            ctx.fillStyle = "#ffffff";
-            ctx.fillText(snip.slice(0, 90), 50, y);
-            y += 36;
-          }
-
+          ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
           screenBase64 = canvas.toDataURL("image/jpeg", 0.85);
         }
-      } catch (drawErr) {
-        console.warn("[Screen Canvas Render Warning]", drawErr);
+
+        // Stop all tracks to end screen sharing immediately
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (screenErr) {
+        console.warn("[Screen Capture Error]", screenErr);
+        // Fallback or user denied permission
+        return {
+          text: "SantoStark, I could not capture the screen. You may have denied the optical capture permission.",
+          provider: "stark-vision",
+          model: "Local Telemetry Array",
+        };
       }
 
       // 2. Post to /api/vision

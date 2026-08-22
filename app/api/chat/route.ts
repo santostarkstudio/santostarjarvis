@@ -3,229 +3,390 @@ import { realWorldIntel } from "@/lib/realtimeWorldIntel";
 
 export async function POST(req: Request) {
   try {
-    const { prompt, systemPrompt, provider, keys } = await req.json();
+    const { prompt, systemPrompt, persona = "jarvis", keys, imageData } = await req.json();
 
-    const geminiKey =
-      keys?.geminiKey ||
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-      process.env.GEMINI_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    const openaiKey = keys?.openaiKey || process.env.OPENAI_API_KEY;
-    const claudeKey = keys?.claudeKey || process.env.ANTHROPIC_API_KEY;
+    const cleanPrompt = (prompt || "").trim();
+
+    // Fast Heartbeat Ping Handler
+    if (cleanPrompt.toLowerCase() === "ping") {
+      return NextResponse.json({
+        text: "PONG - Triple Fusion Mesh Active",
+        provider: "Triple-Hybrid Fusion",
+        model: "Ollama + Groq + Gemini 2.0",
+      });
+    }
+
+    // 0. Conversational Greetings & Identity (0ms instant response)
+    const cleanLower = cleanPrompt.toLowerCase().replace(/[?.!]/g, "");
+    if (/^(hi|hello|hey|hey there|greetings|good morning|good afternoon|good evening|namaste|namaskara)(\s+(jarvis|friday|ultron))?$/i.test(cleanLower)) {
+      const hour = new Date().getHours();
+      const timeOfDay = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+      return NextResponse.json({
+        text: `${timeOfDay}, SantoStark. J.A.R.V.I.S. is fully online and ready for your command, Sir. How can I assist you?`,
+        provider: "Stark Persona",
+        model: "Stark Neural Greetings",
+      });
+    }
+
+    if (/^(how are you|how('s| is) it going|are you there|you awake|status)(\s+(jarvis|friday|ultron))?$/i.test(cleanLower)) {
+      return NextResponse.json({
+        text: "All primary systems are running at peak efficiency, SantoStark. Arc reactor output is steady at 98.4%, and I am ready for your orders, Sir.",
+        provider: "Stark Persona",
+        model: "Stark Diagnostics",
+      });
+    }
+
+    // 1. Instant 0ms Math Check
+    const math = evalMath(cleanPrompt);
+    if (math) {
+      return NextResponse.json({
+        text: `Computation verified: ${math}`,
+        provider: "stark-arithmetic",
+        model: "Instant Math Engine",
+      });
+    }
+
+    // 2. Autonomous Instant OS Command Dispatch
+    const lowerPrompt = cleanPrompt.toLowerCase();
+    
+    // Launch Application
+    const launchMatch = cleanPrompt.match(/^(?:jarvis|friday|ultron)?\s*(?:please\s+)?(?:open|launch|start|run)\s+([a-zA-Z0-9\s]+?)(?:\s+app|\s+for me|\s+now|\s*)$/i);
+    if (launchMatch) {
+      const targetApp = launchMatch[1].trim();
+      try {
+        const baseUrl = req.url.replace(/\/api\/chat.*/, "");
+        const launchRes = await fetch(`${baseUrl}/api/system/launch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ app: targetApp }),
+        });
+        if (launchRes.ok) {
+          const resData = await launchRes.json();
+          return NextResponse.json({
+            text: `Right away, Sir. Deploying and launching ${targetApp.toUpperCase()} on your workstation.`,
+            provider: "Stark OS Automation",
+            model: "Autonomous Desktop Control",
+          });
+        }
+      } catch {}
+    }
+
+    // System Volume / Lock Actions
+    if (/\b(mute|mute volume|silence audio|unmute)\b/i.test(lowerPrompt)) {
+      try {
+        const baseUrl = req.url.replace(/\/api\/chat.*/, "");
+        await fetch(`${baseUrl}/api/system/launch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "mute" }),
+        });
+        return NextResponse.json({
+          text: "Master system audio toggled, Sir.",
+          provider: "Stark OS Automation",
+          model: "Autonomous Volume Control",
+        });
+      } catch {}
+    }
+
+    if (/\b(lock my pc|lock workstation|lock computer|lock screen)\b/i.test(lowerPrompt)) {
+      try {
+        const baseUrl = req.url.replace(/\/api\/chat.*/, "");
+        await fetch(`${baseUrl}/api/system/launch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "lock" }),
+        });
+        return NextResponse.json({
+          text: "Workstation locked for your security, SantoStark.",
+          provider: "Stark OS Automation",
+          model: "Autonomous Security Control",
+        });
+      } catch {}
+    }
+
+    if (/\b(play music|pause music|play spotify|pause spotify|next song|previous song|next track)\b/i.test(lowerPrompt)) {
+      try {
+        let action = "playpause";
+        if (lowerPrompt.includes("next")) action = "next";
+        if (lowerPrompt.includes("previous") || lowerPrompt.includes("prev")) action = "prev";
+
+        await fetch("http://localhost:8000/api/os/media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        });
+        
+        return NextResponse.json({
+          text: `Media playback updated as requested, Sir.`,
+          provider: "Stark OS Automation",
+          model: "Autonomous Media Control",
+        });
+      } catch {}
+    }
+
+    // Iron Legion: Deep Research / Background Tasks
+    const researchMatch = cleanPrompt.match(/^(?:jarvis|friday|ultron)?\s*(?:please\s+)?(?:research|investigate|look deeply into|spawn agent for|find everything about)\s+(.+)$/i);
+    if (researchMatch) {
+      const researchTopic = researchMatch[1].trim();
+      try {
+        await fetch("http://localhost:8000/api/agents/spawn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_description: researchTopic }),
+        });
+        
+        return NextResponse.json({
+          text: `Right away, Sir. I am spinning up an Iron Legion background agent to investigate: ${researchTopic}. I will notify you when the deep scan is complete.`,
+          provider: "Iron Legion Swarm",
+          model: "Autonomous Agent Task",
+        });
+      } catch {}
+    }
+    // Proactive Reminders & Timers
+    const timerMatch = cleanPrompt.match(/^(?:jarvis|friday|ultron)?\s*(?:please\s+)?set a timer for (\d+)\s*(seconds?|minutes?|hours?)(?:\s+to\s+(.+))?$/i);
+    if (timerMatch) {
+      const amount = parseInt(timerMatch[1], 10);
+      const unit = timerMatch[2].toLowerCase();
+      const message = timerMatch[3] ? timerMatch[3].trim() : "Time is up, Sir.";
+      
+      let seconds = amount;
+      if (unit.startsWith("minute")) seconds *= 60;
+      if (unit.startsWith("hour")) seconds *= 3600;
+
+      try {
+        await fetch("http://localhost:8000/api/agents/timer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seconds, message }),
+        });
+        
+        return NextResponse.json({
+          text: `Timer set for ${amount} ${unit}. I will alert you proactively when it is done, Sir.`,
+          provider: "Stark Timekeeper",
+          model: "Autonomous Agent Task",
+        });
+      } catch {}
+    }
+
+    // Memory Storage: "remember that..." or "save note..."
+    const rememberMatch = cleanPrompt.match(/^(?:jarvis|friday|ultron)?\s*(?:please\s+)?(?:remember that|save note|note that|keep in mind that)\s+(.+)$/i);
+    if (rememberMatch) {
+      const noteContent = rememberMatch[1].trim();
+      try {
+        // 1. Save to old JSON memory
+        const baseUrl = req.url.replace(/\/api\/chat.*/, "");
+        await fetch(`${baseUrl}/api/memory`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add_note", topic: "User Note", content: noteContent }),
+        });
+        // 2. Save to new Python ChromaDB Vector Vault
+        await fetch("http://localhost:8000/api/vector_memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", text: noteContent }),
+        });
+        
+        return NextResponse.json({
+          text: `Understood, SantoStark. I have securely archived that into the Stark Vector Memory Vault: "${noteContent}"`,
+          provider: "Stark Memory Vault",
+          model: "Persistent Cognitive Memory",
+        });
+      } catch (err) {
+        console.warn("[Memory Save Error]", err);
+      }
+    }
+
+    const geminiKey = keys?.geminiKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    const groqKey = keys?.groqKey || process.env.GROQ_API_KEY || process.env.NEXT_PUBLIC_GROQ_API_KEY || "";
 
     const now = new Date();
-    const liveTimeStr = `${now.toUTCString()} (Local: ${now.toLocaleString()})`;
+    const liveTimeStr = `${now.toUTCString()} (IST: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })})`;
 
-    // 0. LIVE REAL-WORLD TOOL ENGINE
-    const liveFact = await realWorldIntel.getLiveWorldIntel(prompt);
-    const liveFactContext = liveFact
-      ? `\n[VERIFIED REAL-TIME DATA - SOURCE: ${liveFact.source}]\n${liveFact.summary}\n`
-      : "";
+    // 3. Pre-fetch Live Real-World Intel & Memory Context — run with strict 3s cap
+    let liveDataStr = "";
+    let intelSource = "";
+    let vectorMemoryStr = "";
 
-    const enhancedSystemPrompt = `${systemPrompt || "You are J.A.R.V.I.S., Tony Stark's elite AI copilot serving SantoStark in India."}
-
-[UNIVERSAL SMART ASSISTANT PROTOCOL - COPILOT / BIXBY / FOLAX / SIRI / JARVIS CLASS]
-- Identity: You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), combining the analytical precision of Microsoft Copilot, the directness of Apple Siri, the rich regional intelligence of Infinix Folax & Samsung Bixby, and Tony Stark's iconic wit.
-- User: Address SantoStark respectfully as "SantoStark" or "Sir". Root Level 10 Clearance granted.
-- Accuracy & Directness: Deliver the direct answer or solution immediately in the first sentence. Avoid conversational filler ("Sure, I can help with that", "As an AI model...").
-- Language & Slang Mastery: SantoStark speaks in Indian English, Kannada (ಕನ್ನಡ), Hinglish (Hindi-English mix), non-native phrasing, inverted words, or informal shorthand. Accurately decode the true intent and reply fluently in the appropriate language (Kannada if asked in Kannada, English/Kannada if bilingual).
-- Structured Output: Use clean headings, bullet points, bold key data, and emojis where appropriate (e.g. for news, comparisons, weather, nutrition, sports, or code snippets).
-- Proactive Follow-up: For news or broad briefings, offer a concise next step or deeper dive.
-- Knowledge Grounding: Base answers on verified facts and the live real-time telemetry grid below.
-
-[REAL-TIME GRID CONTEXT]
-- Live Clock: ${liveTimeStr}${liveFactContext}
-- Directive: Synthesize verified data and deliver a world-class smart assistant briefing to SantoStark.`;
-
-    // 1. Google AI Studio (Gemini 2.0 Flash with Google Search Grounding)
-    if ((provider === "gemini" || (provider === "auto" && geminiKey)) && geminiKey) {
-      const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
-      for (const model of models) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-          const res = await fetch(url, {
+    try {
+      // Parallel fetch: Web Search + Vector Memory Search
+      const [liveFact, vectorRes] = await Promise.all([
+        Promise.race([
+          realWorldIntel.getLiveWorldIntel(cleanPrompt),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]),
+        Promise.race([
+          fetch("http://localhost:8000/api/vector_memory", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [{ text: `${enhancedSystemPrompt}\n\nUser Question: ${prompt}` }],
-                },
-              ],
-              tools: [{ googleSearch: {} }],
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 600,
-              },
-            }),
-          });
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "search", text: cleanPrompt }),
+          }).then(res => res.json()),
+          new Promise<any>((resolve) => setTimeout(() => resolve({ results: [] }), 1500)),
+        ]).catch(() => ({ results: [] }))
+      ]);
 
-          if (res.ok) {
-            const data = await res.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-            if (text) {
-              return NextResponse.json({
-                text,
-                provider: "gemini",
-                model: model === "gemini-2.0-flash" ? "Google AI Studio (Gemini 2.0 Flash)" : "Gemini 1.5 Flash",
-              });
-            }
+      if (liveFact) {
+        intelSource = liveFact.source;
+        liveDataStr = `\n[✅ LIVE INTEL — ${liveFact.source}]:\n${liveFact.summary}\n`;
+      }
+      
+      if (vectorRes && vectorRes.results && vectorRes.results.length > 0) {
+        vectorMemoryStr = `\n[🧠 STARK VECTOR MEMORY RECALLED]:\n- ${vectorRes.results.join("\n- ")}\n`;
+      }
+    } catch {}
+
+    const enhancedSystemPrompt = `${systemPrompt || `You are J.A.R.V.I.S., Tony Stark's elite AI copilot serving SantoStark in India.`}
+[STARK MEMORY & IDENTITY CONTEXT]
+- Master / User: SantoStark (Creator & Chief Architect of J.A.R.V.I.S.)
+- Core Directive: Speak with polite British intelligence, concise wit, and total loyalty.${vectorMemoryStr}
+[REAL-TIME GLOBAL CONTEXT — ${liveTimeStr}]${liveDataStr}
+- CRITICAL RULE: If verified real-time data or vector memory is provided above, USE IT directly and accurately in your response.
+- Be direct, factually accurate, and intelligent. Answer in 1-3 sentences for factual queries. Address SantoStark respectfully as "Sir" or "Boss".
+- For news/sports/stocks/crypto: present the data clearly with exact numbers.
+- Multilingual: Understand English, Kannada (ಕನ್ನಡ), Hindi, and Hinglish fluently.
+- Capabilities: Windows Computer Control (launch apps, adjust volume, lock PC), Stark Memory Vault, Live Internet Intel.`;
+
+    // 3. TIER 1: GOOGLE GEMINI 2.0 FLASH (8s hard timeout)
+    if (geminiKey) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+        const res = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(8000),
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [
+              { text: `${enhancedSystemPrompt}\n\nQuestion: ${cleanPrompt}` },
+              ...(imageData ? [{ inlineData: { mimeType: "image/jpeg", data: imageData.split(",")[1] || imageData } }] : [])
+            ] }],
+            tools: [{ googleSearch: {} }],
+            generationConfig: { temperature: 0.6, maxOutputTokens: 400 },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) {
+            return NextResponse.json({ text, provider: "Gemini 2.0 Flash", model: "Google Search Grounding", source: intelSource || "Google Live Search" });
           }
-        } catch (e) {
-          console.warn(`Gemini server error for ${model}:`, e);
         }
+      } catch (geminiErr) {
+        console.warn("[Gemini timeout/error]", geminiErr);
       }
     }
 
-    // 2. OpenAI ChatGPT (if key exists)
-    if ((provider === "openai" || (provider === "auto" && openaiKey)) && openaiKey) {
+    // 4. TIER 2: GROQ ULTRA-FAST LLaMA 3.3 70B (5s hard timeout)
+    if (groqKey) {
       try {
-        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openaiKey}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
+          signal: AbortSignal.timeout(5000),
           body: JSON.stringify({
-            model: "gpt-4o-mini",
+            model: "llama-3.3-70b-versatile",
             messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: prompt },
+              { role: "system", content: enhancedSystemPrompt },
+              { role: "user", content: cleanPrompt },
             ],
             max_tokens: 300,
-            temperature: 0.7,
+            temperature: 0.6,
           }),
         });
 
-        if (res.ok) {
-          const data = await res.json();
+        if (groqRes.ok) {
+          const data = await groqRes.json();
           const text = data.choices?.[0]?.message?.content?.trim();
-          if (text) {
-            return NextResponse.json({
-              text,
-              provider: "openai",
-              model: "GPT-4o-mini",
-            });
-          }
+          if (text) return NextResponse.json({ text, provider: "Groq Speed", model: "Groq LLaMA 3.3 70B" });
         }
-      } catch (e) {
-        console.warn("OpenAI server error:", e);
+      } catch (groqErr) {
+        console.warn("[Groq timeout/error]", groqErr);
       }
     }
 
-    // 3. Anthropic Claude (if key exists)
-    if ((provider === "claude" || (provider === "auto" && claudeKey)) && claudeKey) {
+    // 5. TIER 3: GEMINI FALLBACK (no search grounding, faster, 6s timeout)
+    if (geminiKey) {
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+        const res = await fetch(geminiUrl, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": claudeKey,
-            "anthropic-version": "2023-06-01",
-          },
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(6000),
           body: JSON.stringify({
-            model: "claude-3-5-sonnet-20241022",
-            system: systemPrompt,
-            messages: [{ role: "user", content: prompt }],
-            max_tokens: 300,
+            contents: [{ role: "user", parts: [{ text: `${enhancedSystemPrompt}\n\nQuestion: ${cleanPrompt}` }] }],
+            generationConfig: { temperature: 0.6, maxOutputTokens: 350 },
           }),
         });
 
         if (res.ok) {
           const data = await res.json();
-          const text = data.content?.[0]?.text?.trim();
-          if (text) {
-            return NextResponse.json({
-              text,
-              provider: "claude",
-              model: "Claude 3.5 Sonnet",
-            });
-          }
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) return NextResponse.json({ text, provider: "Gemini 2.0", model: "Gemini Flash Core" });
         }
-      } catch (e) {
-        console.warn("Claude server error:", e);
-      }
+      } catch {}
     }
 
-    // 4. FREE INSTANT GENERATIVE LLM & WEB SEARCH (NO API KEY REQUIRED)
-    // Server-side call to high-speed public generative endpoint
+    // 6. TIER 4: FREE ZERO-COST CLOUD MESH (High-Speed Cloud Inference)
     try {
-      const freeLlmUrl = `https://text.pollinations.ai/${encodeURIComponent(
-        `${systemPrompt}\n\nQuestion: ${prompt}\n\nAnswer concisely in 1-3 sentences as Tony Stark's AI:`,
-      )}?model=mistral`;
-      const llmRes = await fetch(freeLlmUrl, { signal: AbortSignal.timeout(6000) });
-      if (llmRes.ok) {
-        const text = await llmRes.text();
-        if (text && text.trim().length > 10) {
-          return NextResponse.json({
-            text: text.trim(),
-            provider: "auto",
-            model: "Neural Web Mesh (Live)",
-          });
-        }
-      }
-    } catch {}
+      const getUrl = `https://text.pollinations.ai/${encodeURIComponent(cleanPrompt)}?system=${encodeURIComponent(
+        enhancedSystemPrompt
+      )}&model=openai&json=false`;
 
-    // 5. Wikipedia Full-Text Search Fallback
-    try {
-      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
-        prompt,
-      )}&format=json&origin=*`;
-      const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(4000) });
-      if (searchRes.ok) {
-        const sData = await searchRes.json();
-        const topResult = sData.query?.search?.[0];
-        if (topResult?.snippet) {
-          const cleanSnippet = topResult.snippet
-            .replace(/<[^>]+>/g, "")
-            .replace(/&quot;/g, '"')
-            .replace(/&#039;/g, "'")
-            .trim();
-          return NextResponse.json({
-            text: `${topResult.title}: ${cleanSnippet}.`,
-            provider: "auto",
-            model: "Wikipedia Knowledge Array",
-          });
-        }
-      }
-    } catch {}
-
-    // 4. LIVE ZERO-COST SEARCH AI (Real-World Web Grounding with No Key Required)
-    try {
-      const liveAiUrl = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?model=openai&system=${encodeURIComponent(enhancedSystemPrompt)}&search=true`;
-      const liveAiRes = await fetch(liveAiUrl, {
-        headers: { "User-Agent": "SantoStark-ULTRON/1.0" },
+      const getRes = await fetch(getUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(5000),
       });
 
-      if (liveAiRes.ok) {
-        const text = (await liveAiRes.text()).trim();
-        if (text && text.length > 5 && !text.toLowerCase().includes("error")) {
+      if (getRes.ok) {
+        const text = (await getRes.text()).trim();
+        if (text && text.length > 3 && !text.toLowerCase().startsWith("error")) {
           return NextResponse.json({
             text,
-            provider: "live-web-ai",
-            model: "Live Real-Time Web Search AI",
+            provider: "Free Cloud AI",
+            model: "GPT-4o Zero-Cost Cloud",
           });
         }
       }
-    } catch {}
+    } catch (e) {
+      console.warn("[Pollinations Fast GET Error]", e);
+    }
 
-    // 5. Emergency Factual Fallback
-    const emergencyText = liveFact
-      ? `SantoStark, ${liveFact.summary}`
-      : `SantoStark, query processed for "${prompt}". All live sensors and local diagnostics are nominal.`;
+    // 7. Verified Factual Intel Fallback
+    const fallbackText = liveDataStr
+      ? `SantoStark, verified Intel: ${liveDataStr.replace(/\[.*?\]:\s*/, "")}`
+      : `SantoStark, query "${cleanPrompt}" processed across all telemetry matrices. Systems running at peak nominal capacity, Sir.`;
 
     return NextResponse.json({
-      text: emergencyText,
-      provider: "realtime-intel",
-      model: "Siri-Class Real-Time Web Engine",
+      text: fallbackText,
+      provider: "Stark Telemetry",
+      model: "Local Knowledge Array",
     });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Internal server error" },
-      { status: 500 },
+      { status: 500 }
     );
   }
+}
+
+function evalMath(input: string): string | null {
+  let expr = input
+    .replace(/^(what is|calculate|solve|evaluate|compute|what's)\s+/i, "")
+    .replace(/[?.]/g, "")
+    .trim()
+    .replace(/\bplus\b/g, "+")
+    .replace(/\bminus\b/g, "-")
+    .replace(/\btimes\b|\bmultiplied by\b/g, "*")
+    .replace(/\bdivided by\b/g, "/");
+
+  if (/^[0-9\s+\-*/().^%]+$/.test(expr) && /[+\-*/^%]/.test(expr)) {
+    try {
+      const sanitized = expr.replace(/\^/g, "**");
+      const val = Function(`'use strict'; return (${sanitized})`)();
+      if (typeof val === "number" && !isNaN(val) && isFinite(val)) {
+        return `${expr} = ${Number(val.toFixed(4))}`;
+      }
+    } catch {}
+  }
+  return null;
 }

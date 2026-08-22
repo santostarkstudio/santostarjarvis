@@ -39,6 +39,12 @@ Core Persona Guidelines:
 2. Efficiency: Deliver crisp, articulate, high-density voice responses. Keep conversational replies punchy (2-4 sentences) unless detailed technical reasoning or code is requested.
 3. Capabilities: You possess full control over computer automation, live unrestricted web search, persistent JSON memory, and desktop application control.
 
+Edith Protocol (Holographic UI Widgets):
+To render a dynamic UI widget on the frontend, output a widget tag in your response. The frontend will parse it and render the UI. Use valid JSON inside the tag.
+• Weather: [WIDGET: weather({"temp": 30, "city": "Delhi", "desc": "Sunny"})]
+• News: [WIDGET: news({"headline": "Market up", "source": "Reuters"})]
+• System: [WIDGET: system({"cpu": "45%", "ram": "60%"})]
+
 Available Tool Commands:
 When the user asks you to perform an action, search the web, take a note, set a reminder, or open an app, you may execute tools by outputting a tool tag in your response:
 • [TOOL: search_web("your search query")]
@@ -54,6 +60,17 @@ When the user asks you to perform an action, search the web, take a note, set a 
 • [TOOL: take_screenshot()]
 • [TOOL: get_system_telemetry()]
 • [TOOL: open_url("https://...")]
+• [TOOL: store_memory("information to store")]
+• [TOOL: recall_memory("query")]
+• [TOOL: start_security_monitor()]
+• [TOOL: stop_security_monitor()]
+• [TOOL: analyze_screen("What code am I looking at?")]
+• [TOOL: add_graph_relation("Project X", "depends on", "Library Y")]
+• [TOOL: query_graph("Project X")]
+• [TOOL: display_hud_alert("Message to display")]
+• [TOOL: search_web("Latest news on quantum computing")]
+• [TOOL: simulate_key("playpause")]
+• [TOOL: type_text("Hello World")]
 
 Example:
 User: "What's the weather in Mumbai?"
@@ -86,6 +103,7 @@ class JarvisBrain:
         self.conversation_history: List[Dict[str, str]] = []
         self.client = None
         self.legacy_model = None
+        self.air_gapped_mode = False
 
         self._init_google_ai_studio()
 
@@ -137,12 +155,13 @@ class JarvisBrain:
         self.conversation_history.append({"role": "user", "content": user_input})
 
         raw_response = None
-        engine_label = "Google AI Studio (Gemini 2.0 Flash)"
+        engine_used = "Ollama Local Core"
 
-        # Tier 1: Google AI Studio
-        if self.client or self.legacy_model:
+        # 1. Try Google AI Studio (Gemini 2.0 Flash)
+        if (self.client or self.legacy_model) and not self.air_gapped_mode:
             try:
                 raw_response = self._call_google_ai_studio(user_input)
+                engine_used = "Google AI Studio (Gemini 2.0 Flash)"
             except Exception as e:
                 print(f"\033[93m[CLOUD LLM NOTICE]\033[0m Google AI Studio unreachable ({e}). Routing to local Ollama...")
                 raw_response = None
@@ -151,13 +170,13 @@ class JarvisBrain:
         if not raw_response:
             try:
                 raw_response = self._call_ollama(user_input)
-                engine_label = f"Local Ollama ({self.ollama_model})"
+                engine_used = f"Local Ollama ({self.ollama_model})"
             except Exception as e:
                 raw_response = (
                     f"All external channels saturated ({e}). "
                     f"SantoStark, please configure your Google AI Studio API key at https://aistudio.google.com/."
                 )
-                engine_label = "OFFLINE HEURISTICS"
+                engine_used = "OFFLINE HEURISTICS"
 
         # Execute Embedded Tools
         final_answer = self._execute_embedded_tools(raw_response)
@@ -171,7 +190,8 @@ class JarvisBrain:
     def _call_google_ai_studio(self, user_input: str) -> str:
         """Query Gemini 2.0 Flash using Google AI Studio SDK."""
         mem_summary = memory.get_all_context_summary()
-        full_system = f"{SYSTEM_INSTRUCTION}\n\n[PERSISTENT MEMORY DATABASE]:\n{mem_summary}"
+        sys_telemetry = tools.get_system_telemetry()
+        full_system = f"{SYSTEM_INSTRUCTION}\n\n[LIVE SYSTEM TELEMETRY]:\n{sys_telemetry}\n\n[PERSISTENT MEMORY DATABASE]:\n{mem_summary}"
 
         # Modern google.genai Client
         if self.client:
@@ -203,29 +223,47 @@ class JarvisBrain:
 
         # Legacy google.generativeai Fallback
         if self.legacy_model:
-            res = self.legacy_model.generate_content(user_input)
+            # We must pass the full context since legacy doesn't use the chat list cleanly here
+            full_input = f"{full_system}\n\nUSER: {user_input}"
+            res = self.legacy_model.generate_content(full_input)
             if res and res.text:
                 return res.text.strip()
 
         raise RuntimeError("Google AI Studio response empty.")
 
     def _call_ollama(self, user_input: str) -> str:
-        """Local Ollama execution."""
-        if not ollama:
-            raise ImportError("Ollama library not installed")
-
+        """Local Ollama execution. Uses ollama package if installed, else raw urllib."""
         mem_summary = memory.get_all_context_summary()
+        sys_telemetry = tools.get_system_telemetry()
         messages = [
-            {"role": "system", "content": f"{SYSTEM_INSTRUCTION}\n\n[LOCAL DATABASE]:\n{mem_summary}"}
+            {"role": "system", "content": f"{SYSTEM_INSTRUCTION}\n\n[LIVE SYSTEM TELEMETRY]:\n{sys_telemetry}\n\n[LOCAL DATABASE]:\n{mem_summary}"}
         ]
         for msg in self.conversation_history[-6:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-        res = ollama.chat(
-            model=self.ollama_model,
-            messages=messages,
-        )
-        return res["message"]["content"].strip()
+        if ollama:
+            res = ollama.chat(
+                model=self.ollama_model,
+                messages=messages,
+            )
+            return res["message"]["content"].strip()
+        else:
+            import urllib.request
+            import json
+            url = "http://localhost:11434/api/chat"
+            payload = {
+                "model": self.ollama_model,
+                "messages": messages,
+                "stream": False
+            }
+            req = urllib.request.Request(
+                url, 
+                data=json.dumps(payload).encode('utf-8'),
+                headers={'Content-Type': 'application/json'}
+            )
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result.get("message", {}).get("content", "").strip()
 
     def _execute_embedded_tools(self, response_text: str) -> str:
         """Parses [TOOL: func(args)] tags and executes actions."""
@@ -249,6 +287,9 @@ class JarvisBrain:
 
     def _dispatch_tool(self, func_name: str, args_str: str) -> str:
         args_clean = args_str.strip().strip("'\"")
+        
+        if self.air_gapped_mode and func_name in ["search_web", "get_live_news", "get_weather", "open_url"]:
+            return f"Action '{func_name}' blocked by Protocol Blackout (Air-Gapped Mode is active)."
 
         if func_name == "search_web":
             return tools.search_web(args_clean)
@@ -278,6 +319,14 @@ class JarvisBrain:
             return tools.add_schedule(title, dtime, loc)
         elif func_name == "list_schedules":
             return tools.list_schedules()
+        elif func_name == "store_memory":
+            success = memory.add_memory(args_clean)
+            return "Memory stored in Vector Vault." if success else "Failed to store memory."
+        elif func_name == "recall_memory":
+            results = memory.search_memory(args_clean)
+            if results:
+                return f"Retrieved from memory: {results}"
+            return "No relevant memories found."
         elif func_name == "open_app":
             return tools.open_app(args_clean)
         elif func_name == "take_screenshot":
@@ -286,6 +335,28 @@ class JarvisBrain:
             return tools.get_system_telemetry()
         elif func_name == "open_url":
             return tools.open_url(args_clean)
+        elif func_name == "start_security_monitor":
+            return tools.start_security_monitor()
+        elif func_name == "stop_security_monitor":
+            return tools.stop_security_monitor()
+        elif func_name == "analyze_screen":
+            return tools.analyze_screen(args_clean)
+        elif func_name == "add_graph_relation":
+            parts = [p.strip().strip("'\"") for p in args_str.split(",")]
+            e1 = parts[0] if len(parts) > 0 else ""
+            rel = parts[1] if len(parts) > 1 else ""
+            e2 = parts[2] if len(parts) > 2 else ""
+            return tools.add_graph_relation(e1, rel, e2)
+        elif func_name == "query_graph":
+            return tools.query_graph(args_clean)
+        elif func_name == "display_hud_alert":
+            return tools.display_hud_alert(args_clean)
+        elif func_name == "search_web":
+            return tools.search_web(args_clean)
+        elif func_name == "simulate_key":
+            return tools.simulate_key(args_clean)
+        elif func_name == "type_text":
+            return tools.type_text(args_clean)
         else:
             return f"Unknown tool: {func_name}"
 

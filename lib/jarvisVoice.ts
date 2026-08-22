@@ -47,6 +47,12 @@ export interface VoiceCommandCallbacks {
   onRecognizeMusic?(query?: string): void;
   onCompileResearch?(topic: string): void;
   onSystemControl?(action: string, value?: any): void;
+  onGenerateImage?(prompt: string): void;
+  onRenderWidget?(type: string, data: any): void;
+  captureVisionFrame?(): string | null;
+  onLaunchApp?(app: string): void;
+  onPlayMusic?(query: string): void;
+  onSummarizeDocument?(): void;
 }
 
 interface IWindow extends Window {
@@ -56,6 +62,9 @@ interface IWindow extends Window {
 
 export class JarvisVoiceSystem {
   private recognition: any = null;
+  private deepgramSocket: WebSocket | null = null;
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioStream: MediaStream | null = null;
   private isListening = false;
   private callbacks: VoiceCommandCallbacks;
   private synth: SpeechSynthesis | null = null;
@@ -135,13 +144,107 @@ export class JarvisVoiceSystem {
     }
   }
 
-  private speechSilenceTimeout: any = null;
+  private speechSilenceTimeout: NodeJS.Timeout | null = null;
+  private lastInteractionTime: number = 0;
   private latestInterimText = "";
   private lastProcessedInput = "";
   private lastProcessedTime = 0;
 
   public startListening(): boolean {
     if (typeof window === "undefined") return false;
+    
+    // Stop any existing session
+    this.stopListening();
+    
+    const deepgramKey = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY;
+    
+    if (deepgramKey && deepgramKey.trim().length > 0) {
+      // --- DEEPGRAM WEBSOCKET MODE ---
+      try {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          this.audioStream = stream;
+          const savedLang = localStorage.getItem("ultron_speech_lang") || "en-IN";
+          
+          this.deepgramSocket = new WebSocket(`wss://api.deepgram.com/v1/listen?model=nova-2&language=${savedLang}&interim_results=true&smart_format=true`, [
+            "token",
+            deepgramKey
+          ]);
+          
+          this.deepgramSocket.onopen = () => {
+            this.isListening = true;
+            this.callbacks.onListeningStateChange(true);
+            audioEngine.playChirp("start");
+            
+            // Record and send chunks every 250ms
+            // Fallback to audio/webm or audio/ogg depending on browser support
+            let mimeType = 'audio/webm';
+            if (typeof MediaRecorder !== 'undefined' && !MediaRecorder.isTypeSupported('audio/webm')) {
+                mimeType = 'audio/ogg'; // Firefox fallback
+            }
+
+            this.mediaRecorder = new MediaRecorder(stream, { mimeType });
+            this.mediaRecorder.addEventListener('dataavailable', (event) => {
+              if (event.data.size > 0 && this.deepgramSocket?.readyState === WebSocket.OPEN) {
+                this.deepgramSocket.send(event.data);
+              }
+            });
+            this.mediaRecorder.start(250);
+          };
+          
+          this.deepgramSocket.onmessage = (message) => {
+            const received = JSON.parse(message.data);
+            const transcript = received.channel?.alternatives[0]?.transcript;
+            
+            if (transcript) {
+              const isFinal = received.is_final;
+              
+              if (transcript.trim().length > 1) {
+                this.interruptSpeaking();
+              }
+              
+              if (!isFinal) {
+                this.latestInterimText = transcript.trim();
+                this.callbacks.onTranscript(`[Listening...] ${transcript}`);
+                
+                if (this.speechSilenceTimeout) clearTimeout(this.speechSilenceTimeout);
+                this.speechSilenceTimeout = setTimeout(() => {
+                  if (this.latestInterimText && this.latestInterimText.length > 2) {
+                    const textToDispatch = this.latestInterimText;
+                    this.latestInterimText = "";
+                    this.handleVoiceInput(textToDispatch);
+                  }
+                }, 1200);
+              } else {
+                if (this.speechSilenceTimeout) clearTimeout(this.speechSilenceTimeout);
+                this.latestInterimText = "";
+                this.handleVoiceInput(transcript.trim());
+              }
+            }
+          };
+          
+          this.deepgramSocket.onclose = () => {
+            if (this.isListening) {
+                this.isListening = false;
+                this.callbacks.onListeningStateChange(false);
+            }
+          };
+          
+          this.deepgramSocket.onerror = (error) => {
+            console.warn("Deepgram WebSocket Error:", error);
+            this.stopListening();
+          };
+        }).catch(err => {
+          console.warn("Microphone access denied or error:", err);
+          this.callbacks.onListeningStateChange(false);
+        });
+        
+        return true;
+      } catch (err) {
+        console.warn("Deepgram start error:", err);
+      }
+    }
+
+    // --- FALLBACK: WEBSPEECH API MODE ---
     const win = window as unknown as IWindow;
     const SpeechRec = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SpeechRec) {
@@ -160,7 +263,6 @@ export class JarvisVoiceSystem {
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
 
-      // Default to Indian English (en-IN) for accurate Indian accent & Hinglish recognition
       const savedLang = typeof window !== "undefined" ? localStorage.getItem("ultron_speech_lang") || "en-IN" : "en-IN";
       this.recognition.lang = savedLang;
       this.recognition.maxAlternatives = 1;
@@ -184,11 +286,14 @@ export class JarvisVoiceSystem {
           }
         }
 
+        if ((interim.trim().length > 1 || finalTranscript.trim().length > 1)) {
+          this.interruptSpeaking();
+        }
+
         if (interim) {
           this.latestInterimText = interim.trim();
           this.callbacks.onTranscript(`[Listening...] ${interim}`);
 
-          // Auto-dispatch on 1.2s silence pause
           if (this.speechSilenceTimeout) clearTimeout(this.speechSilenceTimeout);
           this.speechSilenceTimeout = setTimeout(() => {
             if (this.latestInterimText && this.latestInterimText.length > 2) {
@@ -214,7 +319,7 @@ export class JarvisVoiceSystem {
       };
 
       this.recognition.onend = () => {
-        if (this.isListening) {
+        if (this.isListening && !this.deepgramSocket) {
           try {
             this.recognition.start();
           } catch {
@@ -240,6 +345,22 @@ export class JarvisVoiceSystem {
   public stopListening(): void {
     if (this.speechSilenceTimeout) clearTimeout(this.speechSilenceTimeout);
     this.isListening = false;
+    
+    if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+      try { this.mediaRecorder.stop(); } catch {}
+    }
+    this.mediaRecorder = null;
+    
+    if (this.audioStream) {
+      this.audioStream.getTracks().forEach(track => track.stop());
+      this.audioStream = null;
+    }
+    
+    if (this.deepgramSocket) {
+      try { this.deepgramSocket.close(); } catch {}
+      this.deepgramSocket = null;
+    }
+    
     if (this.recognition) {
       try {
         this.recognition.stop();
@@ -259,47 +380,88 @@ export class JarvisVoiceSystem {
   }
 
   private currentAudioElement: HTMLAudioElement | null = null;
+  private audioQueue: string[] = [];
+  private isSpeakingFromQueue: boolean = false;
 
-  public speak(text: string): void {
-    if (!text || typeof window === "undefined") return;
-
-    // 1. Stop any current speech
+  public interruptSpeaking(): void {
+    this.audioQueue = []; // Clear queue
+    this.isSpeakingFromQueue = false;
+    let wasSpeaking = false;
     if (this.currentAudioElement) {
-      this.currentAudioElement.pause();
+      try {
+        this.currentAudioElement.pause();
+        this.currentAudioElement.currentTime = 0;
+      } catch {}
       this.currentAudioElement = null;
+      wasSpeaking = true;
     }
-    if (this.synth) {
+    if (this.synth && this.synth.speaking) {
       try {
         this.synth.cancel();
       } catch {}
+      wasSpeaking = true;
+    }
+    if (wasSpeaking) {
+      this.callbacks.onSpeakingStateChange(false);
+    }
+  }
+
+  public enqueueSpeak(text: string): void {
+    if (!text || typeof window === "undefined") return;
+    this.audioQueue.push(text);
+    if (!this.isSpeakingFromQueue && !this.currentAudioElement) {
+      this.processAudioQueue();
+    }
+  }
+
+  private processAudioQueue(): void {
+    if (this.audioQueue.length === 0) {
+      this.isSpeakingFromQueue = false;
+      this.callbacks.onSpeakingStateChange(false);
+      return;
+    }
+
+    this.isSpeakingFromQueue = true;
+    const text = this.audioQueue.shift();
+    if (!text) {
+      this.processAudioQueue();
+      return;
     }
 
     this.callbacks.onSpeakingStateChange(true);
-
-    // 2. Stream Free Neural Voice (/api/tts)
     const ttsUrl = `/api/tts?text=${encodeURIComponent(text)}&persona=${this.persona}`;
     const audio = new Audio(ttsUrl);
     this.currentAudioElement = audio;
 
-    // Attach Stark Suit HUD Intercom Filter
     audioEngine.attachStarkSpeechFilter(audio);
 
-    audio.onplay = () => {
-      this.callbacks.onSpeakingStateChange(true);
-    };
-
     audio.onended = () => {
-      this.callbacks.onSpeakingStateChange(false);
       this.currentAudioElement = null;
+      this.processAudioQueue();
     };
 
     audio.onerror = () => {
+      this.currentAudioElement = null;
       this.speakWithBrowserSynth(text);
+      // Wait for synth to finish (basic fallback)
+      setTimeout(() => this.processAudioQueue(), 2000);
     };
 
     audio.play().catch(() => {
+      this.currentAudioElement = null;
       this.speakWithBrowserSynth(text);
+      setTimeout(() => this.processAudioQueue(), 2000);
     });
+  }
+
+  public speak(text: string): void {
+    if (!text || typeof window === "undefined") return;
+
+    // 1. Stop any current speech before beginning new utterance
+    this.interruptSpeaking();
+    
+    // 2. Put immediately into queue and play
+    this.enqueueSpeak(text);
   }
 
   private speakWithBrowserSynth(text: string): void {
@@ -364,8 +526,21 @@ export class JarvisVoiceSystem {
     this.lastProcessedInput = trimmed;
     this.lastProcessedTime = now;
 
-    this.callbacks.onTranscript(trimmed);
     const lower = trimmed.toLowerCase();
+
+    // Wake Word Filter (15-second conversational memory)
+    const hasWakeWord = /\b(jarvis|friday|ultron|hey jarvis|hey friday|hey ultron)\b/i.test(lower);
+    if (hasWakeWord) {
+      this.lastInteractionTime = Date.now();
+    } else if (Date.now() - this.lastInteractionTime > 15000) {
+      // Ignore background noise if wake word isn't said and conversational window expired
+      return;
+    } else {
+      // Within conversational window, keep it open
+      this.lastInteractionTime = Date.now();
+    }
+
+    this.callbacks.onTranscript(trimmed);
 
     // 1. ——— REAL-TIME DATE & TIME QUERIES (Natural Speech) ———
     if (/^(hey )?(jarvis|friday|ultron)?\s*(what('s| is) (the )?(current )?date|what day is (it|today)|what is today('s)? date|tell me the date|current date)$/i.test(lower)) {
@@ -511,6 +686,41 @@ export class JarvisVoiceSystem {
         this.speak(resp);
         return;
       }
+    }
+
+    // ——— HOLOGRAPHIC AI IMAGE & SCHEMATIC GENERATION ———
+    const imgGenMatch = lower.match(
+      /^(hey )?(jarvis|friday|ultron)?\s*(generate|create|draw|render|sketch)\s+(a |an )?(image|schematic|blueprint|photo|cad|picture)?\s*(of|for)?\s+(.+)/i
+    );
+    if (imgGenMatch && imgGenMatch[7] && !/^(text|code|table)/i.test(imgGenMatch[7])) {
+      const prompt = imgGenMatch[7].trim();
+      this.callbacks.onGenerateImage?.(prompt);
+      const resp = `Generating holographic CAD schematic for '${prompt}', SantoStark.`;
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    // ——— WINDOWS DESKTOP APP LAUNCHER ———
+    const appMatch = lower.match(
+      /^(hey )?(jarvis|friday|ultron)?\s*(open|launch|start|run)\s+(vs ?code|visual studio code|spotify|calculator|calc|notepad|terminal|powershell|cmd|command prompt|file explorer|explorer|task manager|taskmgr)/i
+    );
+    if (appMatch && appMatch[3]) {
+      const targetApp = appMatch[3].trim().toLowerCase();
+      this.callbacks.onLaunchApp?.(targetApp);
+      const resp = `Launching ${targetApp.toUpperCase()} on local desktop node.`;
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
+    }
+
+    // ——— PDF & DATASHEET SUMMARIZATION ———
+    if (/^(summarize (this )?(pdf|document|datasheet)|read (this )?(pdf|datasheet)|explain (this )?(pdf|document))$/i.test(lower)) {
+      this.callbacks.onSummarizeDocument?.();
+      const resp = "Analyzing holographic document and compiling executive summary.";
+      this.callbacks.onResponse(resp);
+      this.speak(resp);
+      return;
     }
 
     // 3. ——— HOLOGRAPHIC APP TABS & SPATIAL WEB BROWSER ———
@@ -845,16 +1055,64 @@ export class JarvisVoiceSystem {
 
     // 9. ——— UNIFIED REAL-TIME STREAMING MULTI-LLM INTELLIGENCE ———
     this.callbacks.onResponse("Thinking...");
+    
+    let lastSpokenIndex = 0;
+    
+    const frame = this.callbacks.captureVisionFrame ? this.callbacks.captureVisionFrame() : null;
+    
     await aiProviderService.askAIStream(
       input,
       this.persona,
       (_token, fullText) => {
         this.callbacks.onResponse(fullText);
+        
+        // Chunk detection for real-time speech
+        const sentenceMatch = fullText.substring(lastSpokenIndex).match(/([.?!])\s/);
+        if (sentenceMatch && sentenceMatch.index !== undefined) {
+          const splitIndex = lastSpokenIndex + sentenceMatch.index + 1;
+          let chunk = fullText.substring(lastSpokenIndex, splitIndex).trim();
+          
+          // Check for Edith Protocol Widget Tags
+          const widgetMatch = chunk.match(/\[WIDGET:\s*(\w+)\((.*?)\)\]/);
+          if (widgetMatch) {
+            try {
+              const widgetType = widgetMatch[1];
+              const widgetData = JSON.parse(widgetMatch[2]);
+              this.callbacks.onRenderWidget?.(widgetType, widgetData);
+            } catch (e) {
+              console.warn("Failed to parse widget payload", e);
+            }
+            // Remove the tag from spoken text
+            chunk = chunk.replace(/\[WIDGET:\s*(\w+)\((.*?)\)\]/g, "").trim();
+          }
+
+          if (chunk.length > 2) {
+            this.enqueueSpeak(chunk);
+          }
+          lastSpokenIndex = splitIndex;
+        }
       },
       (finalText) => {
         this.callbacks.onResponse(finalText);
-        this.speak(finalText);
-      }
+        // Speak remaining text
+        let remaining = finalText.substring(lastSpokenIndex).trim();
+        
+        // Final pass for widgets in case they were at the very end
+        const widgetMatch = remaining.match(/\[WIDGET:\s*(\w+)\((.*?)\)\]/);
+        if (widgetMatch) {
+          try {
+            const widgetType = widgetMatch[1];
+            const widgetData = JSON.parse(widgetMatch[2]);
+            this.callbacks.onRenderWidget?.(widgetType, widgetData);
+          } catch (e) {}
+          remaining = remaining.replace(/\[WIDGET:\s*(\w+)\((.*?)\)\]/g, "").trim();
+        }
+
+        if (remaining.length > 0) {
+          this.enqueueSpeak(remaining);
+        }
+      },
+      frame
     );
   }
 }

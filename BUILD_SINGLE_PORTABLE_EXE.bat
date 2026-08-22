@@ -15,7 +15,7 @@ echo ===========================================================================
 echo.
 
 echo [1/3] Generating Windows High-Resolution App Icons...
-node generate_icons.js
+call node generate_icons.js
 
 echo.
 echo [2/3] Compiling Native Windows Executable (SantoStark_JARVIS.exe)...
@@ -29,25 +29,40 @@ if exist "%CSC%" (
     "%CSC%" /target:winexe /optimize+ /platform:anycpu /win32icon:public\icon.ico /out:SantoStark_JARVIS.exe SantoStark_JARVIS.cs /r:System.Windows.Forms.dll,System.Drawing.dll
     echo [✓] Compilation Successful!
 ) else (
-    echo [!] Built-in C# compiler not found. Creating standalone launcher...
+    echo [!] Built-in C# compiler not found.
 )
 
 echo.
-echo [3/3] Exporting Standalone .EXE to your Desktop...
+echo [3/3] Exporting Standalone .EXE to Separate Dedicated Folder...
+if not exist "JARVIS_STANDALONE_APP" mkdir "JARVIS_STANDALONE_APP"
+
 if exist "SantoStark_JARVIS.exe" (
-    copy /Y "SantoStark_JARVIS.exe" "%USERPROFILE%\Desktop\SantoStark_JARVIS.exe" >nul
+    copy /Y "SantoStark_JARVIS.exe" "JARVIS_STANDALONE_APP\SantoStark_JARVIS.exe" >nul 2>&1
+    copy /Y "public\icon.ico" "JARVIS_STANDALONE_APP\icon.ico" >nul 2>&1
+    copy /Y "SantoStark_JARVIS.exe" "%USERPROFILE%\Desktop\SantoStark_JARVIS.exe" >nul 2>&1
+    copy /Y "SantoStark_JARVIS.exe" "%USERPROFILE%\OneDrive\Desktop\SantoStark_JARVIS.exe" >nul 2>&1
+    copy /Y "SantoStark_JARVIS.exe" "..\SantoStark_JARVIS.exe" >nul 2>&1
+    
     echo.
     echo ==============================================================================
-    echo  [SUCCESS] Your SINGLE PORTABLE .EXE is ready on your Desktop!
-    echo  Location: %USERPROFILE%\Desktop\SantoStark_JARVIS.exe
+    echo  [SUCCESS] Your SINGLE PORTABLE .EXE is ready in its own separate folder!
+    echo ==============================================================================
+    echo  Folder Location:
+    echo  📍 %CD%\JARVIS_STANDALONE_APP\SantoStark_JARVIS.exe
+    echo.
+    echo  Also copied to your Windows Desktop:
+    echo  📍 %USERPROFILE%\Desktop\SantoStark_JARVIS.exe
     echo ==============================================================================
     echo  - Icon: Glowing Iron Man Helmet Eyes (Embedded)
     echo  - ZERO folders needed!
-    echo  - Copy this ONE file (SantoStark_JARVIS.exe) to a USB drive or other PCs.
-    echo  - Double-click anywhere to launch J.A.R.V.I.S. at 60-120 FPS!
+    echo  - You can copy this ONE file (SantoStark_JARVIS.exe) to a USB drive
+    echo    or send it to any other Windows PC. Double-click it anywhere to run!
     echo ==============================================================================
+    
+    REM Open the separate folder automatically in Windows Explorer
+    start "" "%CD%\JARVIS_STANDALONE_APP"
 ) else (
-    echo [!] Check the project directory for SantoStark_JARVIS.exe
+    echo [!] Compilation failed. Check if csc.exe is available.
 )
 
 echo.

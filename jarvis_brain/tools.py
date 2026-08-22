@@ -15,7 +15,43 @@ try:
 except ImportError:
     pyautogui = None
 
+try:
+    from thefuzz import process
+except ImportError:
+    process = None
+
 from memory import memory
+import glob
+
+# Global app registry for fuzzy matching
+_installed_apps_registry = {}
+_apps_scanned = False
+
+def scan_windows_apps():
+    """Scans common Windows directories for application shortcuts (.lnk)."""
+    global _installed_apps_registry, _apps_scanned
+    _installed_apps_registry.clear()
+    
+    paths_to_scan = [
+        os.path.join(os.environ.get('APPDATA', ''), r"Microsoft\Windows\Start Menu\Programs"),
+        r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs",
+        os.path.join(os.environ.get('USERPROFILE', ''), r"Desktop")
+    ]
+    
+    for base_path in paths_to_scan:
+        if not os.path.exists(base_path):
+            continue
+            
+        search_pattern = os.path.join(base_path, "**", "*.lnk")
+        for file_path in glob.iglob(search_pattern, recursive=True):
+            app_name = os.path.splitext(os.path.basename(file_path))[0].lower()
+            app_name = app_name.replace(" (x86)", "").replace(" (x64)", "")
+            if app_name not in _installed_apps_registry:
+                _installed_apps_registry[app_name] = file_path
+                
+    _apps_scanned = True
+    print(f"[JarvisTools] Scanned and found {len(_installed_apps_registry)} installed apps.")
+
 
 
 class JarvisTools:
@@ -30,20 +66,32 @@ class JarvisTools:
 
     @staticmethod
     def search_web(query: str, max_results: int = 5) -> str:
-        """Search DuckDuckGo for live internet info, facts, news, and definitions."""
-        if not DDGS:
-            return "DuckDuckGo search module is not installed."
+        """Search DuckDuckGo for live internet info using native urllib."""
         try:
-            with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=max_results))
-                if not results:
-                    return f"No search results found for: {query}"
-                formatted = []
-                for i, r in enumerate(results, 1):
-                    formatted.append(f"{i}. {r.get('title')}\n   Snippet: {r.get('body')}\n   Link: {r.get('href')}")
-                return "\n\n".join(formatted)
+            import urllib.request
+            import urllib.parse
+            import re
+            
+            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+            req = urllib.request.Request(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            )
+            html = urllib.request.urlopen(req).read().decode('utf-8')
+            
+            snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
+            
+            if not snippets:
+                return "No results found or could not parse the search page."
+                
+            results = []
+            for i, snippet in enumerate(snippets[:max_results]):
+                clean_text = re.sub(r'<[^>]+>', '', snippet).strip()
+                results.append(f"Result {i+1}: {clean_text}")
+                
+            return "\\n".join(results)
         except Exception as e:
-            return f"Web search encountered an anomaly: {e}"
+            return f"Web search failed: {e}"
 
     @staticmethod
     def get_live_news(topic: str = "India top news", max_results: int = 5) -> str:
@@ -112,56 +160,65 @@ class JarvisTools:
 
     @staticmethod
     def open_app(app_name: str) -> str:
-        """Safely launch local desktop applications."""
+        """Safely launch local desktop applications using advanced fuzzy matching."""
         target = app_name.lower().strip()
         system = platform.system().lower()
 
-        try:
-            if "chrome" in target:
-                if system == "windows":
-                    subprocess.Popen(["start", "chrome"], shell=True)
-                elif system == "darwin":
-                    subprocess.Popen(["open", "-a", "Google Chrome"])
-                else:
-                    subprocess.Popen(["google-chrome"])
-                return "Google Chrome launched successfully."
+        # Specific hardcoded fallbacks for web apps
+        if "youtube" in target:
+            webbrowser.open("https://www.youtube.com")
+            return "YouTube opened in default browser."
+        elif "spotify" in target and system != "windows":
+            webbrowser.open("https://open.spotify.com")
+            return "Spotify web player launched."
 
-            elif "notepad" in target:
-                if system == "windows":
-                    subprocess.Popen(["notepad.exe"])
-                else:
-                    subprocess.Popen(["gedit"])
-                return "Notepad opened."
-
-            elif "calc" in target or "calculator" in target:
-                if system == "windows":
-                    subprocess.Popen(["calc.exe"])
-                return "Calculator initialized."
-
-            elif "youtube" in target:
-                webbrowser.open("https://www.youtube.com")
-                return "YouTube opened in default browser."
-
-            elif "spotify" in target:
-                webbrowser.open("https://open.spotify.com")
-                return "Spotify web player launched."
-
-            elif "code" in target or "vscode" in target:
-                subprocess.Popen(["code"], shell=True)
-                return "Visual Studio Code opened."
-
-            elif "terminal" in target or "cmd" in target or "powershell" in target:
-                if system == "windows":
-                    subprocess.Popen(["start", "powershell"], shell=True)
-                return "PowerShell terminal deployed."
-
+        # Advanced Windows Shortcut Resolution
+        if system == "windows":
+            global _apps_scanned, _installed_apps_registry
+            if not _apps_scanned:
+                scan_windows_apps()
+                
+            if not _installed_apps_registry:
+                return "Failed to scan Windows applications list."
+                
+            if process:
+                # Use fuzzy matching if thefuzz is installed
+                choices = list(_installed_apps_registry.keys())
+                best_match, score = process.extractOne(target, choices)
+                
+                if score >= 60:
+                    app_path = _installed_apps_registry[best_match]
+                    try:
+                        os.startfile(app_path)
+                        return f"Launched {best_match} via system shortcuts (Confidence: {score}%)."
+                    except Exception as e:
+                        return f"Failed to launch {best_match}: {e}"
             else:
-                # Attempt generic OS start
-                if system == "windows":
-                    subprocess.Popen(["start", target], shell=True)
+                # Fallback to simple substring matching if thefuzz is missing
+                for name, path in _installed_apps_registry.items():
+                    if target in name or name in target:
+                        try:
+                            os.startfile(path)
+                            return f"Launched {name} via basic system shortcuts."
+                        except Exception as e:
+                            return f"Failed to launch {name}: {e}"
+                            
+            # Ultimate Fallback for Windows
+            try:
+                subprocess.Popen(["start", target], shell=True)
+                return f"Execution command dispatched for: {app_name} via shell fallback."
+            except Exception as e:
+                return f"Failed to launch application '{app_name}': {e}"
+        else:
+            # Non-Windows systems (Linux/Mac)
+            try:
+                if system == "darwin":
+                    subprocess.Popen(["open", "-a", app_name])
+                else:
+                    subprocess.Popen([app_name])
                 return f"Execution command dispatched for: {app_name}"
-        except Exception as e:
-            return f"Failed to launch application '{app_name}': {e}"
+            except Exception as e:
+                return f"Failed to launch application '{app_name}': {e}"
 
     @staticmethod
     def take_screenshot(filename_prefix: str = "jarvis_screen") -> str:
@@ -185,7 +242,17 @@ class JarvisTools:
         now = time.strftime("%A, %B %d, %Y - %I:%M:%S %p")
         sys_info = f"OS: {platform.system()} {platform.release()} ({platform.machine()})"
         py_ver = f"Python: {platform.python_version()}"
-        return f"Current System Time: {now}\nTelemetry: {sys_info} | {py_ver}\nSecurity: Level 10 Root (SantoStark)"
+        
+        hw_stats = ""
+        try:
+            import psutil
+            cpu_usage = psutil.cpu_percent(interval=0.1)
+            ram = psutil.virtual_memory()
+            hw_stats = f"CPU Load: {cpu_usage}% | RAM Usage: {ram.percent}% ({ram.used // (1024**3)}GB / {ram.total // (1024**3)}GB)"
+        except ImportError:
+            pass
+            
+        return f"Current System Time: {now}\nTelemetry: {sys_info} | {py_ver}\nHardware: {hw_stats}\nSecurity: Level 10 Root (SantoStark)"
 
     @staticmethod
     def open_url(url: str) -> str:
@@ -195,5 +262,87 @@ class JarvisTools:
         webbrowser.open(url)
         return f"Navigation initiated for: {url}"
 
+
+    @staticmethod
+    def start_security_monitor() -> str:
+        """Start the facial recognition security monitor."""
+        try:
+            from security_monitor import monitor
+            monitor.start()
+            return "Security monitor activated. Camera feed is now being analyzed."
+        except Exception as e:
+            return f"Failed to start security monitor: {e}"
+            
+    @staticmethod
+    def stop_security_monitor() -> str:
+        """Stop the facial recognition security monitor."""
+        try:
+            from security_monitor import monitor
+            monitor.stop()
+            return "Security monitor deactivated."
+        except Exception as e:
+            return f"Failed to stop security monitor: {e}"
+
+    @staticmethod
+    def analyze_screen(query: str = "Describe what is on my screen right now.") -> str:
+        """Takes a screenshot and sends it to Gemini for vision analysis."""
+        try:
+            from vision import glass
+            return glass.analyze_screen(query)
+        except Exception as e:
+            return f"Project Glass encountered an error: {e}"
+
+    @staticmethod
+    def add_graph_relation(entity1: str, relation: str, entity2: str) -> str:
+        """Adds a node connection to the Neural Knowledge Graph."""
+        try:
+            from knowledge_graph import neural_graph
+            return neural_graph.add_relationship(entity1, relation, entity2)
+        except Exception as e:
+            return f"Failed to add graph relation: {e}"
+
+    @staticmethod
+    def query_graph(entity: str) -> str:
+        """Finds all relationships for a given entity in the Neural Graph."""
+        try:
+            from knowledge_graph import neural_graph
+            return neural_graph.query_entity(entity)
+        except Exception as e:
+            return f"Failed to query graph: {e}"
+
+    @staticmethod
+    def display_hud_alert(message: str) -> str:
+        """Displays a glowing holographic alert on the actual Windows desktop HUD."""
+        try:
+            from hud import hud_controller
+            return hud_controller.show_alert(message)
+        except Exception as e:
+            return f"Failed to project HUD: {e}"
+
+
+
+    @staticmethod
+    def simulate_key(key_sequence: str) -> str:
+        """Simulates keyboard strokes (e.g. 'playpause', 'volumeup', 'enter', 'a,b,c')."""
+        try:
+            import pyautogui
+            keys = [k.strip() for k in key_sequence.split(",")]
+            for k in keys:
+                pyautogui.press(k)
+            return f"Simulated keystrokes: {key_sequence}"
+        except ImportError:
+            return "Failed to simulate key: pyautogui not installed."
+        except Exception as e:
+            return f"Key simulation failed: {e}"
+
+    @staticmethod
+    def type_text(text: str) -> str:
+        """Simulates typing text on the keyboard."""
+        try:
+            import pyautogui
+            pyautogui.write(text, interval=0.01)
+            return f"Typed text: {text}"
+        except Exception as e:
+            return f"Typing failed: {e}"
 
 tools = JarvisTools()

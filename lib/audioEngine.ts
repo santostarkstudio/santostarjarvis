@@ -853,6 +853,10 @@ class AudioEngine {
     };
   }
 
+  public getMetrics(): AudioMetrics {
+    return this.getAudioMetrics();
+  }
+
   /**
    * Routes spoken audio through the Stark Suit HUD Intercom filter
    * (High-pass + 3.4kHz presence boost + compressor + spectrum analyzer connection)

@@ -1,20 +1,37 @@
 import json
 import os
 import time
+import uuid
 from typing import Any, Dict, List, Optional
 
-MEMORY_FILE_PATH = os.path.join(os.path.dirname(__file__), "jarvis_memory.json")
+try:
+    import chromadb
+    CHROMA_AVAILABLE = True
+except ImportError:
+    CHROMA_AVAILABLE = False
+    print("[WARNING] chromadb is not installed. Long-Term Vector Memory is disabled.")
 
+MEMORY_FILE_PATH = os.path.join(os.path.dirname(__file__), "jarvis_memory.json")
+CHROMA_DB_PATH = os.path.join(os.path.dirname(__file__), "chroma_db")
 
 class JarvisMemory:
     """
-    Persistent JSON Storage Layer for Jarvis:
-    Stores schedules, reminders, notes, user preferences, and conversational facts.
+    Persistent JSON Storage Layer + ChromaDB Vector Vault for Jarvis.
     """
 
     def __init__(self, filepath: str = MEMORY_FILE_PATH):
         self.filepath = filepath
         self._ensure_file()
+        
+        self.chroma_client = None
+        self.collection = None
+        if CHROMA_AVAILABLE:
+            try:
+                self.chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+                self.collection = self.chroma_client.get_or_create_collection(name="stark_vault")
+                print("[INFO] ChromaDB Vector Vault initialized successfully.")
+            except Exception as e:
+                print(f"[ERROR] Failed to initialize ChromaDB: {e}")
 
     def _ensure_file(self) -> None:
         if not os.path.exists(self.filepath):
@@ -134,6 +151,37 @@ class JarvisMemory:
             f"User: {data.get('owner', 'SantoStark')} (Clearance: Level {data.get('clearance_level', 10)})\n"
             f"Active Notes: {notes_count} | Pending Reminders: {rems_count} | Scheduled Events: {scheds_count}"
         )
+
+    # ——— VECTOR MEMORY (CHROMADB) ———
+    def add_memory(self, text: str) -> bool:
+        if not self.collection:
+            return False
+        try:
+            mem_id = str(uuid.uuid4())
+            self.collection.add(
+                documents=[text],
+                metadatas=[{"timestamp": time.time()}],
+                ids=[mem_id]
+            )
+            return True
+        except Exception as e:
+            print(f"[VectorDB Error] {e}")
+            return False
+
+    def search_memory(self, query: str, n_results: int = 3) -> List[str]:
+        if not self.collection:
+            return []
+        try:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=n_results
+            )
+            if results and results.get("documents") and len(results["documents"]) > 0:
+                return results["documents"][0]
+            return []
+        except Exception as e:
+            print(f"[VectorDB Error] {e}")
+            return []
 
 
 memory = JarvisMemory()

@@ -133,6 +133,49 @@ function synthesizeWithEdge(
   });
 }
 
+async function synthesizeWithElevenLabs(text: string, persona: string, apiKey: string): Promise<Buffer> {
+  // Mapping Personas to ElevenLabs Voice IDs (These are standard defaults, user can change later)
+  let voiceId = "pNInz6obpgDQGcFmaJgB"; // Default: Adam (British/Professional)
+  
+  switch (persona) {
+    case "friday":
+    case "karen":
+      voiceId = "EXAVITQu4vr4xnSDxMaL"; // Bella (Female)
+      break;
+    case "ultron":
+      voiceId = "VR6AewLTigWG4xSOukaG"; // Arnold (Deep/Menacing)
+      break;
+    case "jarvis-in":
+    case "hindi":
+      voiceId = "z9fAnlkpzviPz146aGWa"; // Glinda (Fallback for non-english, or use a specific Indian voice ID)
+      break;
+  }
+
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+    method: "POST",
+    headers: {
+      "Accept": "audio/mpeg",
+      "xi-api-key": apiKey,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      text: text,
+      model_id: "eleven_monolingual_v1",
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`ElevenLabs API Error: ${await response.text()}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const rawText = searchParams.get("text") || "Hello SantoStark. J.A.R.V.I.S. neural systems online.";
@@ -208,7 +251,19 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const audioBuffer = await synthesizeWithEdge(text, voice, pitch, rate);
+    let audioBuffer: Buffer;
+    const elevenLabsKey = process.env.ELEVENLABS_API_KEY || process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+    
+    if (elevenLabsKey) {
+      try {
+        audioBuffer = await synthesizeWithElevenLabs(text, persona, elevenLabsKey);
+      } catch (elError) {
+        console.warn("[TTS API] ElevenLabs failed, falling back to Edge TTS:", elError);
+        audioBuffer = await synthesizeWithEdge(text, voice, pitch, rate);
+      }
+    } else {
+      audioBuffer = await synthesizeWithEdge(text, voice, pitch, rate);
+    }
 
     // Cache if under 2MB
     if (audioBuffer.length < 2 * 1024 * 1024) {
@@ -226,7 +281,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err) {
-    console.error("[TTS API] Edge synthesis failed:", err);
+    console.error("[TTS API] Synthesis failed:", err);
     return new NextResponse("Synthesis failed", { status: 500 });
   }
 }

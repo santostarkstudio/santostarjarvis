@@ -506,6 +506,37 @@ export class SpatialWorkspaceEngine {
     return this.addAppTab("browser", { url, x: dropCoords?.x, y: dropCoords?.y });
   }
 
+  /**
+   * Generate Holographic AI Image / CAD Schematic
+   */
+  public generateAiImage(prompt: string, title?: string): SpatialCard {
+    const isClient = typeof window !== "undefined";
+    const screenW = isClient ? window.innerWidth : 1440;
+    const screenH = isClient ? window.innerHeight : 900;
+    const seed = Math.floor(Math.random() * 1000000);
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
+      `iron man jarvis holographic futuristic neon blueprint schematic 4k detailed, ${prompt}`
+    )}?width=800&height=600&nologo=true&enhance=true&seed=${seed}`;
+
+    const cleanTitle = title || prompt.slice(0, 30).toUpperCase();
+
+    return this.addCard({
+      title: cleanTitle,
+      subtitle: `AI HOLOGRAPHIC BLUEPRINT // FLUX`,
+      category: "custom",
+      imageSrc: imageUrl,
+      x: Math.max(100, (screenW - 440) / 2 + (Math.random() * 60 - 30)),
+      y: Math.max(90, (screenH - 300) / 2 + (Math.random() * 60 - 30)),
+      width: 440,
+      height: 300,
+      statusTag: "AI_RENDER_COMPLETE",
+      telemetryValues: [
+        { label: "ENGINE", value: "FLUX_NEURAL_MESH" },
+        { label: "RESOLUTION", value: "800x600 HD" },
+      ],
+    });
+  }
+
   public setCardScanning(cardId: string, isScanning: boolean): void {
     const card = this.cards.find((c) => c.id === cardId);
     if (card) {

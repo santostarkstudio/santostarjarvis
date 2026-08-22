@@ -23,6 +23,11 @@ Pillow>=10.4.0
 python-dotenv>=1.0.1
 requests>=2.32.3
 
+# Advanced Logic & OS Telemetry
+psutil>=5.9.0
+thefuzz>=0.20.0
+networkx>=3.0
+
 # Optional FastAPI / WebSocket Bridge for Next.js ULTRON UI
 fastapi>=0.115.0
 uvicorn>=0.30.0

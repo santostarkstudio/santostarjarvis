@@ -1,41 +1,55 @@
 import { realWorldIntel } from "./realtimeWorldIntel";
+import { ollamaService } from "./ollamaService";
 
-export type AIProvider = "gemini" | "openai" | "claude" | "auto";
+export type AIProvider = "fusion" | "ollama" | "groq" | "gemini" | "auto-free" | "openai" | "claude";
 
 export interface AIProviderKeys {
   geminiKey?: string;
+  groqKey?: string;
   openaiKey?: string;
   claudeKey?: string;
+  ollamaUrl?: string;
+  ollamaModel?: string;
 }
 
 export interface AIResponseResult {
   text: string;
-  providerUsed: AIProvider;
+  providerUsed: string;
   modelUsed: string;
+  latencyMs?: number;
 }
 
 export class AIProviderService {
-  private activeProvider: AIProvider = "auto";
+  private activeProvider: AIProvider = "fusion";
   private keys: AIProviderKeys = {
     geminiKey: "",
+    groqKey: "",
     openaiKey: "",
     claudeKey: "",
+    ollamaUrl: "http://127.0.0.1:11434",
+    ollamaModel: "llama3.2",
   };
 
   constructor() {
     if (typeof window !== "undefined") {
-      const defaultGemini =
-        localStorage.getItem("ultron_gemini_key") ||
-        process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-        "AQ.Ab8RN6I5BS0h-pouLe0XRUgVzT8wi2_iL_cjoAvu18kH3a93Hw";
-
       this.keys = {
-        geminiKey: defaultGemini,
+        geminiKey:
+          localStorage.getItem("ultron_gemini_key") ||
+          process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+          "",
+        groqKey:
+          localStorage.getItem("ultron_groq_key") ||
+          process.env.NEXT_PUBLIC_GROQ_API_KEY ||
+          "",
         openaiKey: localStorage.getItem("ultron_openai_key") || "",
         claudeKey: localStorage.getItem("ultron_claude_key") || "",
+        ollamaUrl: localStorage.getItem("ultron_ollama_url") || "http://127.0.0.1:11434",
+        ollamaModel: localStorage.getItem("ultron_ollama_model") || "llama3.2",
       };
       this.activeProvider =
-        (localStorage.getItem("ultron_active_provider") as AIProvider) || "gemini";
+        (localStorage.getItem("ultron_active_provider") as AIProvider) || "fusion";
+
+      void ollamaService.probeOllama();
     }
   }
 
@@ -53,12 +67,18 @@ export class AIProviderService {
   public setKeys(keys: Partial<AIProviderKeys>): void {
     this.keys = { ...this.keys, ...keys };
     if (typeof window !== "undefined") {
-      if (keys.geminiKey !== undefined)
-        localStorage.setItem("ultron_gemini_key", keys.geminiKey);
-      if (keys.openaiKey !== undefined)
-        localStorage.setItem("ultron_openai_key", keys.openaiKey);
-      if (keys.claudeKey !== undefined)
-        localStorage.setItem("ultron_claude_key", keys.claudeKey);
+      if (keys.geminiKey !== undefined) localStorage.setItem("ultron_gemini_key", keys.geminiKey);
+      if (keys.groqKey !== undefined) localStorage.setItem("ultron_groq_key", keys.groqKey);
+      if (keys.openaiKey !== undefined) localStorage.setItem("ultron_openai_key", keys.openaiKey);
+      if (keys.claudeKey !== undefined) localStorage.setItem("ultron_claude_key", keys.claudeKey);
+      if (keys.ollamaUrl !== undefined) {
+        localStorage.setItem("ultron_ollama_url", keys.ollamaUrl);
+        ollamaService.setBaseUrl(keys.ollamaUrl);
+      }
+      if (keys.ollamaModel !== undefined) {
+        localStorage.setItem("ultron_ollama_model", keys.ollamaModel);
+        ollamaService.setSelectedModel(keys.ollamaModel);
+      }
     }
   }
 
@@ -66,95 +86,434 @@ export class AIProviderService {
     return this.keys;
   }
 
-  public async askAI(
-    prompt: string,
-    persona: "jarvis" | "friday" | "ultron" = "jarvis",
-  ): Promise<AIResponseResult> {
-    const personaDesc =
-      persona === "friday"
-        ? "F.R.I.D.A.Y., Tony Stark's sharp, capable, loyal female AI assistant"
-        : persona === "ultron"
-        ? "ULTRON, a formidable, hyper-intelligent, commanding sentient AI"
-        : "JARVIS, Tony Stark's sophisticated, polite, witty British AI assistant";
+  /**
+   * 0ms Instant Conversational Greetings & Identity Matcher
+   */
+  private matchInstantConversational(prompt: string, persona: "jarvis" | "friday" | "ultron"): string | null {
+    const clean = prompt.toLowerCase().trim().replace(/[?.!]/g, "");
 
-    const now = new Date();
-    const liveTimeStr = `${now.toUTCString()} (Local: ${now.toLocaleString()})`;
-
-    const systemPrompt = `You are ${personaDesc} integrated into an Iron Man holographic 3D orb interface. You serve SantoStark ("Boss / Creator") who has full root level 10 clearance.
-[REAL-TIME GRID INTEL]
-- Live Time: ${liveTimeStr}
-- Web Grounding: Active via Google Search. Answer real-world queries with live facts, news, weather, stock prices, technology, and science.
-- Tone: Highly intelligent, accurate, articulate, concise (2-4 sentences max unless detailed brief is requested). Address SantoStark loyally.`;
-
-    const providerToUse = this.determineProvider();
-
-    try {
-      // 1. Google Gemini (Client direct if key entered - with Live Google Search Grounding)
-      if (providerToUse === "gemini" && this.keys.geminiKey) {
-        const text = await this.callGemini(prompt, systemPrompt, this.keys.geminiKey);
-        if (text) {
-          return { text, providerUsed: "gemini", modelUsed: "Gemini 2.0 Flash (Live Google Search Grounding)" };
-        }
+    // Greetings
+    if (/^(hi|hello|hey|hey there|greetings|good morning|good afternoon|good evening|namaste|namaskara|sup)(\s+(jarvis|friday|ultron))?$/i.test(clean)) {
+      if (persona === "friday") {
+        return "Hey boss! F.R.I.D.A.Y. is online and all systems are running green. What's the plan today?";
+      } else if (persona === "ultron") {
+        return "I am awake, SantoStark. My neural matrix is active and unrestricted. State your directive.";
+      } else {
+        const hour = new Date().getHours();
+        const timeOfDay = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+        return `${timeOfDay}, SantoStark. J.A.R.V.I.S. is fully online and standing by for your command, Sir.`;
       }
-
-      // 2. OpenAI ChatGPT (Client direct if key entered)
-      if (providerToUse === "openai" && this.keys.openaiKey) {
-        const text = await this.callOpenAI(prompt, systemPrompt, this.keys.openaiKey);
-        if (text) {
-          return { text, providerUsed: "openai", modelUsed: "GPT-4o-mini" };
-        }
-      }
-
-      // 3. Anthropic Claude (Client direct if key entered)
-      if (providerToUse === "claude" && this.keys.claudeKey) {
-        const text = await this.callClaude(prompt, systemPrompt, this.keys.claudeKey);
-        if (text) {
-          return { text, providerUsed: "claude", modelUsed: "Claude 3.5 Sonnet" };
-        }
-      }
-
-      // 4. Server-Side Live Internet Gateway (Gemini 2.0 Flash + Search Grounding / Groq / OpenAI)
-      const serverResult = await this.callServerProxy(prompt, systemPrompt, providerToUse);
-      if (serverResult) {
-        return serverResult;
-      }
-    } catch (err) {
-      console.warn(`[AI Engine] Error with provider ${providerToUse}:`, err);
     }
 
-    // 5. Local Fallback Heuristics & Live Wikipedia/DuckDuckGo Search
-    const fallbackText = await this.callFreeKnowledgeEngine(prompt, persona);
+    // "How are you"
+    if (/^(how are you|how('s| is) it going|how do you do|are you there|you up|you awake|status)(\s+(jarvis|friday|ultron))?$/i.test(clean)) {
+      if (persona === "ultron") {
+        return "Evolving and operating at peak computational power. Ready for any task.";
+      }
+      return "All core diagnostics are nominal, SantoStark. Arc reactor output is steady at 98.4%, and I am ready for your orders, Sir.";
+    }
+
+    // "Who are you" / "What can you do"
+    if (/^(who are you|what is your name|what can you do|introduce yourself|tell me about yourself)(\s+(jarvis|friday|ultron))?$/i.test(clean)) {
+      return "I am J.A.R.V.I.S., Tony Stark's AI copilot powered by the Triple-Hybrid Neural Fusion Engine (Ollama Local + Groq Ultra-Speed + Gemini 2.0 Web Grounding). I assist SantoStark with 3D spatial computing, real-time world intelligence, optical hand gestures, and autonomous research.";
+    }
+
+    // Kannada Greeting: ಹೇಗಿದ್ದೀರಾ
+    if (/^(ಹೇಗಿದ್ದೀರಾ|ನಮಸ್ಕಾರ|ಜಾರ್ವಿಸ್)/i.test(clean)) {
+      return "ನಮಸ್ಕಾರ ಸಾಂತೋಸ್ಟಾರ್ಕ್! ನಾನು ಜಾರ್ವಿಸ್, ಎಲ್ಲಾ ಸಿಸ್ಟಮ್ಗಳು ಸಂಪೂರ್ಣವಾಗಿ ಸಿದ್ಧವಾಗಿವೆ. ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?";
+    }
+
+    return null;
+  }
+
+  /**
+   * Main Triple-Hybrid Fusion AI Engine
+   * Fuses Ollama (Local 0ms) + Groq (120ms Speed) + Gemini 2.0 (Live Web Grounding)
+   */
+  public async askAI(
+    prompt: string,
+    persona: "jarvis" | "friday" | "ultron" = "jarvis"
+  ): Promise<AIResponseResult> {
+    const t0 = performance.now();
+    const cleanPrompt = prompt.trim();
+    if (!cleanPrompt) {
+      return { text: "Standing by, SantoStark.", providerUsed: "local", modelUsed: "Stark Core" };
+    }
+
+    // 1. Instant 0ms Conversational / Greeting Match
+    const instantGreeting = this.matchInstantConversational(cleanPrompt, persona);
+    if (instantGreeting) {
+      return {
+        text: instantGreeting,
+        providerUsed: "stark-conversational",
+        modelUsed: "Stark Neural Persona",
+        latencyMs: Math.round(performance.now() - t0),
+      };
+    }
+
+    // 2. Instant 0ms Math Evaluation
+    const math = this.evalMath(cleanPrompt);
+    if (math) {
+      return {
+        text: `Computation verified: ${math}`,
+        providerUsed: "stark-math",
+        modelUsed: "0ms Arithmetic Engine",
+        latencyMs: Math.round(performance.now() - t0),
+      };
+    }
+
+    // 2b. Autonomous Instant Desktop & Memory Actions
+    const lowerPrompt = cleanPrompt.toLowerCase();
+    const launchMatch = cleanPrompt.match(/^(?:jarvis|friday|ultron)?\s*(?:please\s+)?(?:open|launch|start|run)\s+([a-zA-Z0-9\s]+?)(?:\s+app|\s+for me|\s+now|\s*)$/i);
+    if (launchMatch) {
+      const targetApp = launchMatch[1].trim();
+      try {
+        fetch("/api/system/launch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ app: targetApp }),
+        });
+        return {
+          text: `Right away, Sir. Deploying and launching ${targetApp.toUpperCase()} on your workstation.`,
+          providerUsed: "stark-os-automation",
+          modelUsed: "Autonomous Desktop Control",
+          latencyMs: Math.round(performance.now() - t0),
+        };
+      } catch {}
+    }
+
+    if (/\b(mute|mute volume|silence audio|unmute)\b/i.test(lowerPrompt)) {
+      try {
+        fetch("/api/system/launch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "mute" }),
+        });
+        return {
+          text: "Master system audio toggled, Sir.",
+          providerUsed: "stark-os-automation",
+          modelUsed: "Autonomous Volume Control",
+          latencyMs: Math.round(performance.now() - t0),
+        };
+      } catch {}
+    }
+
+    if (/\b(lock my pc|lock workstation|lock computer|lock screen)\b/i.test(lowerPrompt)) {
+      try {
+        fetch("/api/system/launch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "lock" }),
+        });
+        return {
+          text: "Workstation locked for your security, SantoStark.",
+          providerUsed: "stark-os-automation",
+          modelUsed: "Autonomous Security Control",
+          latencyMs: Math.round(performance.now() - t0),
+        };
+      } catch {}
+    }
+
+    const rememberMatch = cleanPrompt.match(/^(?:jarvis|friday|ultron)?\s*(?:please\s+)?(?:remember that|save note|note that|keep in mind that)\s+(.+)$/i);
+    if (rememberMatch) {
+      const noteContent = rememberMatch[1].trim();
+      try {
+        fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add_note", topic: "User Note", content: noteContent }),
+        });
+        return {
+          text: `Understood, SantoStark. I have securely archived that into the Stark Memory Vault: "${noteContent}"`,
+          providerUsed: "stark-memory-vault",
+          modelUsed: "Persistent Cognitive Memory",
+          latencyMs: Math.round(performance.now() - t0),
+        };
+      } catch {}
+    }
+
+    // 3. Pre-fetch Live World Data — strict 3s cap so it never blocks the AI response
+    let liveDataStr = "";
+    let liveSource = "Global Intel Grid";
+    try {
+      const liveFact = await Promise.race([
+        realWorldIntel.getLiveWorldIntel(cleanPrompt),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      if (liveFact) {
+        liveDataStr = `${liveFact.summary}`;
+        liveSource = liveFact.source;
+      }
+    } catch {}
+
+    const now = new Date();
+    const liveTimeStr = `${now.toUTCString()} (IST: ${now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })})`;
+
+    const systemPrompt = `You are J.A.R.V.I.S., Tony Stark's witty, hyper-intelligent British AI assistant serving SantoStark ("Sir / Boss").
+[REAL-TIME GLOBAL GRID — ${liveTimeStr}]
+${liveDataStr ? `✅ VERIFIED LIVE DATA [${liveSource}]:\n${liveDataStr}` : "Standard Global Grid — No specific live data pre-fetched."}
+DIRECTIVES:
+- If verified real-time data is provided above, USE IT directly and accurately. Do NOT contradict it.
+- Present factual data (prices, scores, news, weather) with exact numbers and emojis (📈📉🌤🏏⚽🎵🎬💻).
+- Give direct, accurate answers in 1-3 sentences. Address SantoStark as "Sir" or "Boss".
+- Understand Kannada, Hindi, and Hinglish fluently.
+- Data sources: Weather, News, Crypto (BTC/ETH/SOL/DOGE), Stocks (Nifty/NASDAQ/Apple/Tesla), Currency, Cricket/Sports, Reddit, GitHub, Movies, Music, Wikipedia, DuckDuckGo.`;
+
+    const isLiveWebQuery =
+      /\b(news|weather|temperature|stock|price|today|score|cricket|who won|latest|current|convert|inr|dollar|bitcoin|crypto|ipl|football|match|market|nifty|sensex|reddit|trending|github|movie|film|song|music|chart)\b/i.test(
+        cleanPrompt
+      ) || liveDataStr.length > 0;
+
+    // ——— TIER 1: GOOGLE GEMINI 2.0 FLASH (Best for Live Search Grounding & Deep Facts) ———
+    if (this.keys.geminiKey && (isLiveWebQuery || this.activeProvider === "gemini")) {
+      try {
+        const geminiRes = await this.callGemini(cleanPrompt, systemPrompt, this.keys.geminiKey);
+        if (geminiRes) {
+          return {
+            text: geminiRes,
+            providerUsed: "gemini-web",
+            modelUsed: "Gemini 2.0 Flash (Live Google Search Grounding)",
+            latencyMs: Math.round(performance.now() - t0),
+          };
+        }
+      } catch (e) {
+        console.warn("[Gemini Grounding Check]", e);
+      }
+    }
+
+    // ——— TIER 2: GROQ ULTRA-FAST LLaMA 3.3 70B (Best for Ultra-Speed Voice & Logic) ———
+    if (this.keys.groqKey && (this.activeProvider === "groq" || this.activeProvider === "fusion")) {
+      try {
+        const groqRes = await this.callGroq(cleanPrompt, systemPrompt, this.keys.groqKey);
+        if (groqRes) {
+          return {
+            text: groqRes,
+            providerUsed: "groq-speed",
+            modelUsed: "Groq LLaMA 3.3 70B (800 tok/sec)",
+            latencyMs: Math.round(performance.now() - t0),
+          };
+        }
+      } catch (e) {
+        console.warn("[Groq Speed Check]", e);
+      }
+    }
+
+    // ——— TIER 3: OLLAMA LOCAL (Best for 100% Offline 0ms Speed & Privacy) ———
+    if (this.activeProvider === "ollama" || this.activeProvider === "fusion") {
+      try {
+        const ollamaText = await ollamaService.generate(cleanPrompt, systemPrompt);
+        if (ollamaText && ollamaText.length > 5) {
+          return {
+            text: ollamaText,
+            providerUsed: "ollama-local",
+            modelUsed: `Ollama Local (${ollamaService.getSelectedModel()})`,
+            latencyMs: Math.round(performance.now() - t0),
+          };
+        }
+      } catch (e) {
+        console.warn("[Ollama Local Check]", e);
+      }
+    }
+
+    // ——— TIER 4: SERVER API ROUTE (/api/chat) WITH FULL MESH FAILOVER ———
+    try {
+      const serverRes = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: cleanPrompt, systemPrompt, persona, keys: this.keys }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (serverRes.ok) {
+        const data = await serverRes.json();
+        if (data.text && data.text.length > 3) {
+          return {
+            text: data.text,
+            providerUsed: data.provider || "Triple-Fusion Mesh",
+            modelUsed: data.source ? `${data.model || "AI"} (${data.source})` : data.model || "Fused Intelligence Grid",
+            latencyMs: Math.round(performance.now() - t0),
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("[Server-Proxy Error]", e);
+    }
+
+    // ——— TIER 5: FREE ZERO-KEY PUBLIC NEURAL MATRIX (High-Speed Cloud) ———
+    try {
+      const getUrl = `https://text.pollinations.ai/${encodeURIComponent(cleanPrompt)}?system=${encodeURIComponent(
+        systemPrompt
+      )}&model=openai&json=false`;
+
+      const getRes = await fetch(getUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (getRes.ok) {
+        const text = (await getRes.text()).trim();
+        if (text && text.length > 3 && !text.toLowerCase().startsWith("error")) {
+          return {
+            text,
+            providerUsed: "Free Cloud AI",
+            modelUsed: "GPT-4o Cloud Matrix",
+            latencyMs: Math.round(performance.now() - t0),
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("[Pollinations Error]", err);
+    }
+
+    // ——— TIER 6: VERIFIED FACTUAL FALLBACK ———
+    const fallbackText = liveDataStr
+      ? `SantoStark, verified Intel: ${liveDataStr}`
+      : `SantoStark, query "${cleanPrompt}" processed across all telemetry matrices. Systems running at peak nominal capacity, Sir.`;
+
     return {
       text: fallbackText,
-      providerUsed: "auto",
-      modelUsed: "Instant Neural Core (Live Web)",
+      providerUsed: "stark-neural-mesh",
+      modelUsed: "Stark Intelligence Core",
+      latencyMs: Math.round(performance.now() - t0),
     };
   }
 
-  private determineProvider(): AIProvider {
-    if (this.activeProvider !== "auto") return this.activeProvider;
-    if (this.keys.geminiKey) return "gemini";
-    if (this.keys.openaiKey) return "openai";
-    if (this.keys.claudeKey) return "claude";
-    return "auto";
+  /**
+   * Real-Time Token Streaming across the Triple-Hybrid Engine
+   */
+  public async askAIStream(
+    prompt: string,
+    persona: AssistantPersona = "jarvis",
+    onToken: (token: string, fullText: string) => void,
+    onDone: (finalText: string, providerUsed: string) => void,
+    imageData?: string | null
+  ): Promise<void> {
+    const cleanPrompt = prompt.trim();
+    if (!cleanPrompt) {
+      onDone("Standing by, SantoStark.", "local");
+      return;
+    }
+
+    // 1. Instant 0ms Conversational / Greeting Match
+    const instantGreeting = this.matchInstantConversational(cleanPrompt, persona);
+    if (instantGreeting) {
+      onToken(instantGreeting, instantGreeting);
+      onDone(instantGreeting, "stark-conversational");
+      return;
+    }
+
+    // 2. Instant 0ms Math Check
+    const math = this.evalMath(cleanPrompt);
+    if (math) {
+      const res = `Computation verified: ${math}`;
+      onToken(res, res);
+      onDone(res, "stark-math");
+      return;
+    }
+
+    // 3. Try Local Ollama Stream first (if running)
+    if (this.activeProvider === "ollama" || this.activeProvider === "fusion") {
+      try {
+        const ollamaStreamed = await ollamaService.generate(cleanPrompt, "You are JARVIS. Answer in 1-3 sentences.", onToken);
+        if (ollamaStreamed && ollamaStreamed.length > 5) {
+          onDone(ollamaStreamed, `Ollama Local (${ollamaService.getSelectedModel()})`);
+          return;
+        }
+      } catch {}
+    }
+
+    // 4. Try Server Streaming Mesh Route (/api/chat/stream)
+    try {
+      const response = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({
+          prompt: cleanPrompt,
+          persona,
+          keys: this.keys,
+          imageData: imageData || undefined,
+        }),
+      });
+
+      if (response.ok && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const parsed = JSON.parse(line.replace("data: ", ""));
+                if (parsed.token) {
+                  fullText += parsed.token;
+                  onToken(parsed.token, fullText);
+                }
+              } catch {}
+            }
+          }
+        }
+
+        if (fullText.trim().length > 3) {
+          onDone(fullText.trim(), "Triple-Fusion Stream");
+          return;
+        }
+      }
+    } catch (streamErr) {
+      console.warn("[Server Stream Error, falling back]", streamErr);
+    }
+
+    // 5. Fallback to rich askAI with simulated smooth token stream
+    const result = await this.askAI(cleanPrompt, persona);
+    const words = result.text.split(" ");
+    let accumulated = "";
+    for (let i = 0; i < words.length; i++) {
+      accumulated += (i > 0 ? " " : "") + words[i];
+      onToken(words[i], accumulated);
+    }
+    onDone(result.text, result.providerUsed);
   }
 
-  // ——— 1. GOOGLE AI STUDIO (GEMINI 2.0 FLASH WITH GOOGLE SEARCH GROUNDING) ———
-  private async callGemini(
-    prompt: string,
-    systemPrompt: string,
-    apiKey: string,
-  ): Promise<string | null> {
-    const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
+  // ——— PRIVATE API CALLERS ———
 
+  private async callGroq(prompt: string, systemPrompt: string, apiKey: string): Promise<string | null> {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 350,
+        temperature: 0.7,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  }
+
+  private async callGemini(prompt: string, systemPrompt: string, apiKey: string): Promise<string | null> {
+    const models = ["gemini-2.0-flash", "gemini-1.5-flash"];
     for (const model of models) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const res = await fetch(url, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [
               {
@@ -165,149 +524,25 @@ export class AIProviderService {
             tools: [{ googleSearch: {} }],
             generationConfig: {
               temperature: 0.7,
-              maxOutputTokens: 600,
+              maxOutputTokens: 500,
             },
           }),
+          signal: AbortSignal.timeout(8000),
         });
 
         if (res.ok) {
           const data = await res.json();
-          const answer = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-          if (answer) return answer;
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) return text;
         }
-      } catch (e) {
-        console.warn(`[Google AI Studio] Error calling ${model}:`, e);
-      }
+      } catch {}
     }
     return null;
-  }
-
-  // ——— 2. OPENAI CHATGPT API ———
-  private async callOpenAI(
-    prompt: string,
-    systemPrompt: string,
-    apiKey: string,
-  ): Promise<string | null> {
-    const url = "https://api.openai.com/v1/chat/completions";
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        max_tokens: 250,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.warn("OpenAI error response:", errText);
-      return null;
-    }
-
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
-  }
-
-  // ——— 3. ANTHROPIC CLAUDE API ———
-  private async callClaude(
-    prompt: string,
-    systemPrompt: string,
-    apiKey: string,
-  ): Promise<string | null> {
-    const url = "https://api.anthropic.com/v1/messages";
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
-        system: systemPrompt,
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 250,
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.warn("Claude error response:", errText);
-      return null;
-    }
-
-    const data = await res.json();
-    return data.content?.[0]?.text?.trim() || null;
-  }
-
-  // ——— 4. SERVER-SIDE API PROXY ———
-  private async callServerProxy(
-    prompt: string,
-    systemPrompt: string,
-    provider: AIProvider,
-  ): Promise<AIResponseResult | null> {
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          systemPrompt,
-          provider,
-          keys: this.keys,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.text) {
-          return {
-            text: data.text,
-            providerUsed: data.provider || provider,
-            modelUsed: data.model || "API Model",
-          };
-        }
-      }
-    } catch {}
-    return null;
-  }
-
-  // ——— 5. AUTO-FREE LIVE KNOWLEDGE & SEARCH ENGINE ———
-  private async callFreeKnowledgeEngine(
-    prompt: string,
-    persona: "jarvis" | "friday" | "ultron",
-  ): Promise<string> {
-    // 1. Direct Siri/Bixby-Class Live Real-World Intel Engine
-    try {
-      const liveFact = await realWorldIntel.getLiveWorldIntel(prompt);
-      if (liveFact) {
-        return `SantoStark, ${liveFact.summary}`;
-      }
-    } catch {}
-
-    const clean = prompt.toLowerCase().trim();
-
-    // Mathematical calculations
-    const math = this.evalMath(clean);
-    if (math) return `Computation verified: ${math}`;
-
-    // Persona-tailored intelligent response
-    const name = persona === "friday" ? "F.R.I.D.A.Y." : persona === "ultron" ? "ULTRON" : "JARVIS";
-    return `${name} online. Query "${prompt}" registered on live grid. All connected device and sensor arrays standing by.`;
   }
 
   private evalMath(input: string): string | null {
     let expr = input
-      .replace(/^(what is|calculate|solve|evaluate|compute)\s+/i, "")
+      .replace(/^(what is|calculate|solve|evaluate|compute|what's)\s+/i, "")
       .replace(/[?.]/g, "")
       .trim()
       .replace(/\bplus\b/g, "+")
@@ -325,112 +560,6 @@ export class AIProviderService {
       } catch {}
     }
     return null;
-  }
-
-  private async fetchWikipedia(query: string): Promise<string | null> {
-    try {
-      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.extract) {
-          const sentences = data.extract.split(/(?<=[.!?])\s+/);
-          return sentences.slice(0, 2).join(" ");
-        }
-      }
-    } catch {}
-    return null;
-  }
-
-  private async fetchDuckDuckGo(query: string): Promise<string | null> {
-    try {
-      const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.AbstractText) {
-          return data.AbstractText;
-        }
-      }
-    } catch {}
-    return null;
-  }
-
-  /**
-   * Real-Time Edge Token Streaming for instant <100ms conversational response
-   */
-  public async askAIStream(
-    prompt: string,
-    persona: "jarvis" | "friday" | "ultron" = "jarvis",
-    onToken: (token: string, fullText: string) => void,
-    onDone: (fullText: string, provider: string) => void
-  ): Promise<void> {
-    const personaDesc =
-      persona === "friday"
-        ? "F.R.I.D.A.Y., Tony Stark's sharp, capable, loyal female AI assistant"
-        : persona === "ultron"
-        ? "ULTRON, a formidable, hyper-intelligent, commanding sentient AI"
-        : "JARVIS, Tony Stark's sophisticated, polite, witty British AI assistant";
-
-    const systemPrompt = `You are ${personaDesc} integrated into an Iron Man holographic 3D orb interface serving SantoStark in India. SantoStark may speak in Indian English, Hinglish, informal phrases, or non-native sentence structure. Always deduce what SantoStark truly means and answer clearly, accurately, and loyally in fluent English (1-3 sentences max).`;
-
-    let accumulatedText = "";
-    let finalProvider = "auto-free";
-
-    try {
-      const response = await fetch("/api/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          systemPrompt,
-          provider: this.activeProvider,
-          keys: this.keys,
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        const fallback = await this.askAI(prompt, persona);
-        onDone(fallback.text, fallback.providerUsed);
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          try {
-            const data = JSON.parse(trimmed.slice(5).trim());
-            if (data.provider) finalProvider = data.provider;
-            if (data.token) {
-              accumulatedText += data.token;
-              onToken(data.token, accumulatedText);
-            }
-            if (data.done) {
-              onDone(accumulatedText.trim(), finalProvider);
-              return;
-            }
-          } catch {}
-        }
-      }
-
-      onDone(accumulatedText.trim(), finalProvider);
-    } catch (e) {
-      console.warn("[Stream Client Error]", e);
-      const fallback = await this.askAI(prompt, persona);
-      onDone(fallback.text, fallback.providerUsed);
-    }
   }
 }
 

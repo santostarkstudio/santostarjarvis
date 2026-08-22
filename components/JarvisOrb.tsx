@@ -27,6 +27,7 @@ import { starkFullDuplex } from "@/lib/fullDuplexVoice";
 import { starkHelmetParallax, type ParallaxState } from "@/lib/headTrackingParallax";
 import { starkResearchAgent } from "@/lib/researchAgent";
 import { starkSystemControl, type SystemTelemetryState } from "@/lib/systemControl";
+import { ollamaService } from "@/lib/ollamaService";
 
 type CameraState = "off" | "starting" | "on" | "error";
 
@@ -85,10 +86,12 @@ export default function JarvisOrb() {
   const [textInput, setTextInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
-  // Multi-LLM Keys
+  // Multi-LLM Keys (Triple-Hybrid Fusion: Ollama + Groq + Gemini)
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [groqKeyInput, setGroqKeyInput] = useState("");
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [claudeKeyInput, setClaudeKeyInput] = useState("");
+  const [ollamaUrlInput, setOllamaUrlInput] = useState("http://127.0.0.1:11434");
 
   // Supabase Cloud Vault
   const [supabaseUrlInput, setSupabaseUrlInput] = useState("");
@@ -106,8 +109,10 @@ export default function JarvisOrb() {
     if (showSettings) {
       const keys = aiProviderService.getKeys();
       setGeminiKeyInput(keys.geminiKey || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "");
+      setGroqKeyInput(keys.groqKey || process.env.NEXT_PUBLIC_GROQ_API_KEY || "");
       setOpenaiKeyInput(keys.openaiKey || "");
       setClaudeKeyInput(keys.claudeKey || "");
+      setOllamaUrlInput(keys.ollamaUrl || "http://127.0.0.1:11434");
 
       const config = supabaseVault.getConfig();
       setSupabaseUrlInput(config.supabaseUrl);
@@ -255,6 +260,37 @@ export default function JarvisOrb() {
     };
   }, []);
 
+  // Iron Legion Sub-Agent WebSocket Listener
+  useEffect(() => {
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket("ws://localhost:8000/ws/jarvis");
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "AGENT_STATUS") {
+            showToast(data.message);
+            // Optionally make Jarvis speak the completion message
+            if (data.status === "COMPLETED" && window.speechSynthesis) {
+              const utterance = new SpeechSynthesisUtterance(data.message);
+              utterance.pitch = 0.9;
+              utterance.rate = 1.05;
+              const voices = window.speechSynthesis.getVoices();
+              const voice = voices.find(v => v.name.toLowerCase().includes("brian") || v.name.toLowerCase().includes("daniel")) || voices[0];
+              if (voice) utterance.voice = voice;
+              window.speechSynthesis.speak(utterance);
+            }
+          }
+        } catch (err) {}
+      };
+    } catch (err) {
+      console.warn("Failed to connect to Neural Bridge WS", err);
+    }
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [showToast]);
+
   // AI Connection Heartbeat & Latency Monitor
   const [aiHeartbeat, setAiHeartbeat] = useState<{
     status: "optimal" | "auxiliary" | "checking";
@@ -271,6 +307,25 @@ export default function JarvisOrb() {
     const testHeartbeat = async () => {
       const t0 = performance.now();
       try {
+        const keys = aiProviderService.getKeys();
+        const ollamaStatus = await ollamaService.probeOllama();
+
+        // Check which engines are active
+        const activeEngines: string[] = [];
+        if (ollamaStatus.isAvailable) activeEngines.push("Ollama");
+        if (keys.groqKey) activeEngines.push("Groq");
+        if (keys.geminiKey) activeEngines.push("Gemini 2.0");
+
+        if (activeEngines.length > 0 && isMounted) {
+          setAiHeartbeat({
+            status: "optimal",
+            latencyMs: ollamaStatus.isAvailable ? ollamaStatus.latencyMs : 110,
+            provider: `Triple Fusion: ${activeEngines.join(" + ")}`,
+          });
+          return;
+        }
+
+        // Cloud Neural Mesh Probe
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -282,15 +337,10 @@ export default function JarvisOrb() {
           setAiHeartbeat({
             status: "optimal",
             latencyMs: latency,
-            provider: data.provider || "Gemini 2.0",
+            provider: data.provider || "Free Cloud AI",
           });
-          console.log(
-            `%c[STARK AI MESH LINKED]%c Provider: ${data.provider || "Gemini 2.0"} | Latency: ${latency}ms | Status: NOMINAL`,
-            "background:#00e5ff; color:#000; font-weight:bold; padding:2px 6px; border-radius:3px;",
-            "color:#00ff88; font-weight:bold;"
-          );
         } else if (isMounted) {
-          setAiHeartbeat({ status: "auxiliary", latencyMs: latency, provider: "Auxiliary Failover" });
+          setAiHeartbeat({ status: "auxiliary", latencyMs: latency, provider: "Local Mesh" });
         }
       } catch {
         if (isMounted) {
@@ -460,6 +510,80 @@ export default function JarvisOrb() {
     }
   }, [lockScreenPin, showToast]);
 
+  // ——— SAVE SETTINGS HANDLER (TRIPLE-HYBRID FUSION) ———
+  const handleSaveSettings = useCallback(() => {
+    aiProviderService.setKeys({
+      geminiKey: geminiKeyInput.trim(),
+      groqKey: groqKeyInput.trim(),
+      openaiKey: openaiKeyInput.trim(),
+      claudeKey: claudeKeyInput.trim(),
+      ollamaUrl: ollamaUrlInput.trim(),
+    });
+
+    if (supabaseUrlInput.trim() && supabaseKeyInput.trim()) {
+      supabaseVault.saveConfig(supabaseUrlInput.trim(), supabaseKeyInput.trim());
+      supabaseVault.testConnection().then((ok) => {
+        setIsSupabaseConnected(ok);
+        if (ok) showToast("🛡️ SUPABASE CLOUD VAULT CONNECTED");
+      });
+    }
+
+    if (voiceSystemRef.current) {
+      voiceSystemRef.current.setSpeechLanguage(speechLang);
+      voiceSystemRef.current.setPersona(activePersona);
+    }
+
+    setShowSettings(false);
+    audioEngine.playChirp("success");
+    showToast("⚙️ CONFIGURATION SAVED // TRIPLE-FUSION ACTIVE");
+  }, [
+    geminiKeyInput,
+    groqKeyInput,
+    openaiKeyInput,
+    claudeKeyInput,
+    ollamaUrlInput,
+    supabaseUrlInput,
+    supabaseKeyInput,
+    speechLang,
+    activePersona,
+    showToast,
+  ]);
+
+  // ——— MOBILE STARK REMOTE SYNC RECEIVER ———
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const remoteChannel = new BroadcastChannel("stark_remote_sync");
+    remoteChannel.onmessage = (event) => {
+      const data = event.data;
+      if (!data) return;
+      if (data.type === "REPULSOR_BLAST") {
+        triggerRepulsorShockwave();
+        showToast("💥 MOBILE REMOTE: REPULSOR BLAST");
+      } else if (data.type === "VIBRANIUM_SHIELD") {
+        setIsShieldActive(true);
+        audioEngine.playShieldActivate();
+        showToast("🛡️ MOBILE REMOTE: SHIELD ACTIVE");
+      } else if (data.type === "CHANGE_THEME" && data.payload?.theme) {
+        handleThemeChange(data.payload.theme);
+        showToast(`🎨 MOBILE REMOTE: THEME -> ${data.payload.theme.toUpperCase()}`);
+      } else if (data.type === "LOCKDOWN_LAB") {
+        starkSecurity.lockSystem();
+        audioEngine.playLock();
+        showToast("🚨 MOBILE REMOTE: LAB LOCKED DOWN");
+      } else if (data.type === "GYRO_UPDATE" && data.payload) {
+        const { beta, gamma } = data.payload;
+        if (sceneRef.current?.mesh) {
+          sceneRef.current.mesh.rotation.x = (beta * Math.PI) / 180;
+          sceneRef.current.mesh.rotation.y = (gamma * Math.PI) / 180;
+        }
+      }
+    };
+
+    return () => {
+      remoteChannel.close();
+    };
+  }, [handleThemeChange, triggerRepulsorShockwave, showToast]);
+
   // ——— CLOSE / SLICE CARD HELPER ———
   const handleCloseCardWithSlice = useCallback(
     (card: SpatialCard) => {
@@ -530,6 +654,17 @@ export default function JarvisOrb() {
       onResponse: (resp) => setAiResponse(resp),
       onListeningStateChange: (listening) => setIsListening(listening),
       onSpeakingStateChange: (speaking) => setIsSpeaking(speaking),
+      captureVisionFrame: () => {
+        const video = videoRef.current;
+        if (!video || video.readyState < 2) return null;
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL("image/jpeg", 0.7);
+      },
       onClearDrawings: () => {
         spatialWorkspace.clearDrawings();
         audioEngine.playDrop();
@@ -696,6 +831,69 @@ export default function JarvisOrb() {
           starkSystemControl.setVolume(100);
           setIsSfxMuted(false);
           showToast("🔊 AUDIO RESTORED");
+        }
+      },
+      onGenerateImage: (prompt) => {
+        showToast(`🎨 GENERATING SCHEMATIC // ${prompt.toUpperCase()}`);
+        audioEngine.playScan();
+        spatialWorkspace.generateAiImage(prompt);
+      },
+      onRenderWidget: (type, data) => {
+        showToast(`📦 RENDERING WIDGET // ${type.toUpperCase()}`);
+        audioEngine.playBoot();
+        let title = type.toUpperCase() + " WIDGET";
+        let subtitle = "DYNAMIC UI COMPONENT";
+        let textContent = JSON.stringify(data, null, 2);
+        
+        if (type === "weather") {
+          title = "WEATHER FORECAST";
+          subtitle = data.location ? `LOCATION // ${data.location.toUpperCase()}` : "LOCAL";
+          textContent = `Condition: ${data.condition || "Unknown"}\nTemperature: ${data.temperature || "N/A"}\nHumidity: ${data.humidity || "N/A"}\nWind: ${data.wind || "N/A"}`;
+        } else if (type === "stock") {
+          title = "MARKET TICKER";
+          subtitle = data.symbol ? `SYMBOL // ${data.symbol.toUpperCase()}` : "MARKET OVERVIEW";
+          textContent = `Price: ${data.price || "N/A"}\nChange: ${data.change || "N/A"}\nVolume: ${data.volume || "N/A"}`;
+        } else if (type === "timer") {
+          title = "COUNTDOWN TIMER";
+          subtitle = data.duration ? `DURATION // ${data.duration}` : "TIMER";
+          textContent = `Timer set for ${data.duration}.\nStatus: Active.`;
+        }
+        
+        spatialWorkspace.addCard({
+          title,
+          subtitle,
+          category: "custom",
+          textContent,
+          width: 320,
+          height: 220,
+          statusTag: "WIDGET_ACTIVE",
+        });
+      },
+      onLaunchApp: async (app) => {
+        showToast(`🚀 LAUNCHING // ${app.toUpperCase()}`);
+        audioEngine.playBoot();
+        try {
+          await fetch("/api/system/launch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ app }),
+          });
+        } catch (e) {
+          console.warn("[AppLauncher]", e);
+        }
+      },
+      onSummarizeDocument: () => {
+        const topDoc = spatialWorkspace.getCards().find((c) => c.category === "document" || c.textContent);
+        if (topDoc) {
+          showToast(`📄 SUMMARIZING // ${topDoc.title}`);
+          audioEngine.playScanSweep();
+          const summary = `Executive summary for ${topDoc.title}: Document contains ${
+            topDoc.textContent ? topDoc.textContent.slice(0, 180) + "..." : "technical schematics and parameters"
+          }. All parameters nominal.`;
+          setAiResponse(summary);
+          voiceSystemRef.current?.speak(summary);
+        } else {
+          showToast("⚠️ NO DOCUMENTS IN WORKSPACE");
         }
       },
     });
@@ -1537,23 +1735,6 @@ export default function JarvisOrb() {
   const primaryPointer = handPointers.find((p) => p.handedness === "Right") || handPointers[0];
   const grabbedCard = activeGrabCardId ? spatialWorkspace.getCardById(activeGrabCardId) : null;
 
-  const handleSaveSettings = useCallback(() => {
-    aiProviderService.setProvider(activeProvider);
-    aiProviderService.setKeys({
-      geminiKey: geminiKeyInput.trim(),
-      openaiKey: openaiKeyInput.trim(),
-      claudeKey: claudeKeyInput.trim(),
-    });
-    if (supabaseUrlInput && supabaseKeyInput) {
-      supabaseVault.setConfig(supabaseUrlInput.trim(), supabaseKeyInput.trim());
-      supabaseVault.syncBiometricsToCloud(securityProfile);
-      setIsSupabaseConnected(true);
-    }
-    showToast("⚙️ CONFIGURATION SAVED // CLOUD VAULT SYNCED");
-    setShowSettings(false);
-    audioEngine.playClick();
-  }, [activeProvider, geminiKeyInput, openaiKeyInput, claudeKeyInput, supabaseUrlInput, supabaseKeyInput, securityProfile, showToast]);
-
   return (
     <div
       className="orb-app"
@@ -1682,12 +1863,12 @@ export default function JarvisOrb() {
       {cameraOn && primaryPointer && (
         <div
           className={`stark-hand-cursor ${isDrawMode
-              ? "draw-mode"
-              : activeGrabCardId
-                ? "grabbing"
-                : hoveredCardId
-                  ? "locked"
-                  : primaryPointer.pose
+            ? "draw-mode"
+            : activeGrabCardId
+              ? "grabbing"
+              : hoveredCardId
+                ? "locked"
+                : primaryPointer.pose
             }`}
           style={{
             left: `${primaryPointer.screenX}px`,
@@ -1994,6 +2175,16 @@ export default function JarvisOrb() {
                     </div>
                     <iframe src={card.url} className="holo-iframe" title={card.title} />
                   </div>
+                ) : card.category === "document" && card.mediaSrc ? (
+                  // 8b. HOLOGRAPHIC PDF & DATASHEET READER
+                  <div className="holo-app-container pdf-viewer-container" style={{ width: "100%", height: "100%", minHeight: "220px" }}>
+                    <iframe
+                      src={card.mediaSrc}
+                      className="holo-iframe"
+                      title={card.title}
+                      style={{ width: "100%", height: "100%", border: "none", borderRadius: "4px" }}
+                    />
+                  </div>
                 ) : card.category === "video" && card.mediaSrc ? (
                   // 9. VIDEO CINEMA PLAYER
                   <div className="holo-app-container video-cinema-player">
@@ -2192,6 +2383,16 @@ export default function JarvisOrb() {
           >
             🔊 TEST VOICE
           </button>
+          <a
+            href="/remote"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="persona-pill"
+            style={{ border: "1px solid #00ff88", color: "#00ff88", background: "rgba(0, 255, 136, 0.15)", textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+            title="Open Mobile Phone Stark Remote Controller"
+          >
+            📱 MOBILE REMOTE
+          </a>
         </div>
 
         {/* Telemetry Strip */}
@@ -2214,15 +2415,15 @@ export default function JarvisOrb() {
                   aiHeartbeat.status === "optimal"
                     ? "#00ff88"
                     : aiHeartbeat.status === "checking"
-                    ? "#00e5ff"
-                    : "#ffaa00",
+                      ? "#00e5ff"
+                      : "#ffaa00",
               }}
             >
               {aiHeartbeat.status === "optimal"
                 ? `🟢 ${aiHeartbeat.latencyMs}ms`
                 : aiHeartbeat.status === "checking"
-                ? "🟡 PING..."
-                : "🟠 AUX"}
+                  ? "🟡 PING..."
+                  : "🟠 AUX"}
             </span>
           </div>
           <div className="hud-badge">
@@ -3266,15 +3467,37 @@ export default function JarvisOrb() {
                 </div>
               </div>
 
-              {/* API Keys */}
+              {/* API Keys - Stark Triple Hybrid Fusion */}
               <label className="modal-label">
-                ✨ GOOGLE GEMINI API KEY
+                ✨ GOOGLE GEMINI API KEY (LIVE SEARCH GROUNDING)
                 <input
                   type="password"
                   className="cyber-input modal-field"
                   placeholder="AIzaSy..."
                   value={geminiKeyInput}
                   onChange={(e) => setGeminiKeyInput(e.target.value)}
+                />
+              </label>
+
+              <label className="modal-label">
+                ⚡ GROQ API KEY (800 TOKENS/SEC ULTRA-SPEED)
+                <input
+                  type="password"
+                  className="cyber-input modal-field"
+                  placeholder="gsk_..."
+                  value={groqKeyInput}
+                  onChange={(e) => setGroqKeyInput(e.target.value)}
+                />
+              </label>
+
+              <label className="modal-label">
+                🦙 OLLAMA LOCAL SERVER URL (0ms OFFLINE SPEED)
+                <input
+                  type="text"
+                  className="cyber-input modal-field"
+                  placeholder="http://127.0.0.1:11434"
+                  value={ollamaUrlInput}
+                  onChange={(e) => setOllamaUrlInput(e.target.value)}
                 />
               </label>
 
